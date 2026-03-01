@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Upload, Image as ImageIcon, X } from 'lucide-react';
+import { Upload, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface ImageUploaderProps {
@@ -14,8 +14,7 @@ const ImageUploader = ({ value, onChange, label, imageType = 'general' }: ImageU
   const [uploading, setUploading] = React.useState(false);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+       const file = e.target.files?.;    if (!file) return;
     setUploading(true);
     try {
       const path = `upload-${imageType}-${Date.now()}`;

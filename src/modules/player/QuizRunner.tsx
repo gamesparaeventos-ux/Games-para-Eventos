@@ -2,9 +2,16 @@ import { useEffect, useState } from 'react';
 import { Timer, CheckCircle, XCircle, Trophy, AlertCircle, Loader2 } from 'lucide-react';
 import type { QuizConfig } from '../events/quiz.types';
 
+// Estendendo o tipo Window apenas para este arquivo
+declare global {
+  interface Window {
+    __OFFLINE_CONFIG__?: QuizConfig;
+  }
+}
+
 interface QuizRunnerProps {
-  config?: QuizConfig; // Tornamos opcional para tratar o estado de carregamento
-  mode: 'preview' | 'live' | 'office'; // Adicionado o modo 'office'
+  config?: QuizConfig; 
+  mode: 'preview' | 'live' | 'office'; 
   onComplete?: (score: number) => void;
 }
 
@@ -16,53 +23,12 @@ export function QuizRunner({ config, mode, onComplete }: QuizRunnerProps) {
   const [timeLeft, setTimeLeft] = useState(15);
   const [gameStatus, setGameStatus] = useState<'playing' | 'finished'>('playing');
 
-  // LÓGICA DE FALLBACK PARA MODO OFFICE
-  // Se estivermos em modo office e o config não vier por props, 
-  // tentamos buscar de uma variável global injetada no index.html do download.
-  const finalConfig = config || (window as any).__OFFLINE_CONFIG__;
+  const finalConfig = config || window.__OFFLINE_CONFIG__;
 
   const questions = finalConfig?.questions || [];
   const currentQuestion = questions[currentQuestionIndex];
   const totalQuestions = questions.length;
   const progress = totalQuestions > 0 ? (currentQuestionIndex / totalQuestions) * 100 : 0;
-
-  useEffect(() => {
-    if (gameStatus === 'finished' || !currentQuestion) return;
-    if (isAnswered) return;
-
-    if (timeLeft > 0) {
-      const timerId = setTimeout(() => setTimeLeft((prev) => prev - 1), 1000);
-      return () => clearTimeout(timerId);
-    } else {
-      handleTimeOut();
-    }
-  }, [timeLeft, isAnswered, gameStatus, currentQuestion]);
-
-  // Se o config ainda não existe, mostramos um loader em vez de tela preta
-  if (!finalConfig && mode === 'office') {
-    return (
-      <div className="w-full h-screen flex flex-col items-center justify-center bg-indigo-950 text-white">
-        <Loader2 className="animate-spin mb-4" size={48} />
-        <p className="font-bold">Carregando dados do evento local...</p>
-      </div>
-    );
-  }
-
-  const handleTimeOut = () => {
-    setIsAnswered(true);
-    setTimeout(nextQuestion, 2000);
-  };
-
-  const handleOptionClick = (optionIndex: number) => {
-    if (isAnswered || !currentQuestion) return;
-    setSelectedOption(optionIndex);
-    setIsAnswered(true);
-
-    if (optionIndex === currentQuestion.correctIndex) {
-      setScore((prev) => prev + 100 + (timeLeft * 10));
-    }
-    setTimeout(nextQuestion, 2000);
-  };
 
   const nextQuestion = () => {
     if (currentQuestionIndex + 1 < totalQuestions) {
@@ -74,6 +40,40 @@ export function QuizRunner({ config, mode, onComplete }: QuizRunnerProps) {
       setGameStatus('finished');
       if (onComplete) onComplete(score);
     }
+  };
+
+  useEffect(() => {
+    if (gameStatus === 'finished' || !currentQuestion) return;
+    if (isAnswered) return;
+
+    if (timeLeft > 0) {
+      const timerId = setTimeout(() => setTimeLeft((prev) => prev - 1), 1000);
+      return () => clearTimeout(timerId);
+    } else {
+      setIsAnswered(true);
+      setTimeout(nextQuestion, 2000);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeLeft, isAnswered, gameStatus, currentQuestion]);
+
+  if (!finalConfig && mode === 'office') {
+    return (
+      <div className="w-full h-screen flex flex-col items-center justify-center bg-indigo-950 text-white">
+        <Loader2 className="animate-spin mb-4" size={48} />
+        <p className="font-bold">Carregando dados do evento local...</p>
+      </div>
+    );
+  }
+
+  const handleOptionClick = (optionIndex: number) => {
+    if (isAnswered || !currentQuestion) return;
+    setSelectedOption(optionIndex);
+    setIsAnswered(true);
+
+    if (optionIndex === currentQuestion.correctIndex) {
+      setScore((prev) => prev + 100 + (timeLeft * 10));
+    }
+    setTimeout(nextQuestion, 2000);
   };
 
   if (!currentQuestion || totalQuestions === 0) {

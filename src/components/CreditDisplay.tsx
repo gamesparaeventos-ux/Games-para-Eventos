@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Zap } from 'lucide-react';
 
@@ -6,21 +6,20 @@ export function CreditDisplay() {
   const [credits, setCredits] = useState<number | null>(null);
 
   useEffect(() => {
+    let isMounted = true;
+    const fetchCredits = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from('profiles')
+        .select('credits')
+        .eq('id', user.id)
+        .single();
+      if (isMounted && data) setCredits(data.credits);
+    };
     fetchCredits();
+    return () => { isMounted = false; };
   }, []);
-
-  const fetchCredits = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data } = await supabase
-      .from('profiles')
-      .select('credits')
-      .eq('id', user.id)
-      .single();
-
-    if (data) setCredits(data.credits);
-  };
 
   if (credits === null) return null;
 

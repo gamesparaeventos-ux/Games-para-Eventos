@@ -21,7 +21,7 @@ export function QuizEditor() {
     const pres = new pptxgen();
     
     // Slide 1: Capa
-    let slide1 = pres.addSlide();
+    const slide1 = pres.addSlide();
     slide1.background = { color: gameData.primaryColor }; 
     slide1.addText(gameData.title, { 
       x: 0, y: "40%", w: "100%", align: "center", 
@@ -29,7 +29,7 @@ export function QuizEditor() {
     });
 
     // Slide 2: Pergunta
-    let slide2 = pres.addSlide();
+    const slide2 = pres.addSlide();
     slide2.background = { color: "FFFFFF" };
     // Barra de título com a cor escolhida
     slide2.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: "100%", h: 1.5, fill: { color: gameData.primaryColor } });

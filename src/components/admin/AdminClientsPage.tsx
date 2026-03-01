@@ -1,22 +1,31 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { 
   MoreVertical, Search, UserCheck, UserX, 
-  PlusCircle, MinusCircle, Shield, Eye, 
+  PlusCircle, MinusCircle, Eye, 
   Loader2, LogOut, X, Calendar, Users, CreditCard 
 } from 'lucide-react';
 import { toast } from 'sonner';
+import type { User } from '@supabase/supabase-js';
+// Interface definida para eliminar os erros de 'any'
+interface UserProfile {
+  id: string;
+  name: string | null;
+  email: string | null;
+  credits: number;
+  status: 'ACTIVE' | 'BLOCKED';
+  created_at: string;
+}
 
 export function AdminClientsPage() {
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   
-  // Estados para Modais
   const [modalType, setModalType] = useState<'credits' | 'details' | null>(null);
-  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [creditAmount, setCreditAmount] = useState<number>(0);
 
   useEffect(() => { 
@@ -33,11 +42,14 @@ export function AdminClientsPage() {
       const { data, error } = await supabase.from('profiles').select('*').order('name');
       if (error) throw error;
       setUsers(data || []);
-    } catch (err) { toast.error("Erro ao carregar clientes"); }
-    finally { setLoading(false); }
+    } catch { 
+      toast.error("Erro ao carregar clientes"); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
-  const handleImpersonate = async (user: any) => {
+  const handleImpersonate = async (user: UserProfile) => {
     localStorage.setItem('impersonated_user_id', user.id);
     localStorage.setItem('admin_original_session', JSON.stringify(currentUser));
     toast.success(`Entrando como ${user.name}`);
@@ -45,7 +57,7 @@ export function AdminClientsPage() {
   };
 
   const handleCredits = async () => {
-    if (creditAmount === 0) return;
+    if (creditAmount === 0 || !selectedUser) return;
     try {
       const { error } = await supabase.rpc('add_user_credits', {
         user_id_input: selectedUser.id,
@@ -55,10 +67,12 @@ export function AdminClientsPage() {
       toast.success("Saldo atualizado com sucesso!");
       fetchUsers();
       setModalType(null);
-    } catch (err) { toast.error("Erro ao atualizar créditos"); }
+    } catch { 
+      toast.error("Erro ao atualizar créditos"); 
+    }
   };
 
-  const handleUpdateStatus = async (user: any) => {
+  const handleUpdateStatus = async (user: UserProfile) => {
     const newStatus = user.status === 'ACTIVE' ? 'BLOCKED' : 'ACTIVE';
     const { error } = await supabase.from('profiles').update({ status: newStatus }).eq('id', user.id);
     if (!error) {
@@ -83,7 +97,12 @@ export function AdminClientsPage() {
           <div className="p-6 border-b border-slate-50">
             <div className="relative max-w-md">
               <Search className="absolute left-4 top-3.5 text-slate-400" size={20} />
-              <input type="text" placeholder="Buscar cliente..." className="w-full pl-12 pr-4 py-3 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-purple-500 font-medium" onChange={(e) => setSearchTerm(e.target.value)} />
+              <input 
+                type="text" 
+                placeholder="Buscar cliente..." 
+                className="w-full pl-12 pr-4 py-3 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-purple-500 font-medium" 
+                onChange={(e) => setSearchTerm(e.target.value)} 
+              />
             </div>
           </div>
 
@@ -92,7 +111,6 @@ export function AdminClientsPage() {
               <tr className="text-slate-400 text-[10px] uppercase font-black tracking-widest bg-slate-50/50">
                 <th className="px-8 py-5">Cliente</th>
                 <th className="px-8 py-5 text-center">Saldo</th>
-                {/* ADIÇÃO: Coluna de Faturamento conforme imagem */}
                 <th className="px-8 py-5 text-center">Faturamento</th>
                 <th className="px-8 py-5 text-right">Ações</th>
               </tr>
@@ -105,12 +123,16 @@ export function AdminClientsPage() {
                     <div className="text-xs text-slate-400 font-medium">{user.email}</div>
                   </td>
                   <td className="px-8 py-6 text-center font-black text-slate-800 text-xl">{user.credits || 0}</td>
-                  {/* ADIÇÃO: Valor de Faturamento conforme imagem */}
                   <td className="px-8 py-6 text-center">
                     <span className="font-bold text-green-500">R$ 0,00</span>
                   </td>
                   <td className="px-8 py-6 text-right relative">
-                    <button onClick={() => setActiveMenu(activeMenu === user.id ? null : user.id)} className="p-2 text-slate-300 hover:text-slate-600 transition-all"><MoreVertical size={22} /></button>
+                    <button 
+                      onClick={() => setActiveMenu(activeMenu === user.id ? null : user.id)} 
+                      className="p-2 text-slate-300 hover:text-slate-600 transition-all"
+                    >
+                      <MoreVertical size={22} />
+                    </button>
 
                     {activeMenu === user.id && (
                       <div className="absolute right-8 top-16 w-60 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 py-3 animate-in fade-in zoom-in duration-200">
@@ -132,7 +154,7 @@ export function AdminClientsPage() {
         </div>
       </div>
 
-      {/* MODAL DE CRÉDITOS - Corrigido z-index e visual conforme image_e6a445.png */}
+      {/* MODAL DE CRÉDITOS */}
       {modalType === 'credits' && (
         <div className="fixed inset-0 z- flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden border border-white/20">
@@ -146,16 +168,26 @@ export function AdminClientsPage() {
             <div className="p-8 space-y-6">
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2 text-center">Quantidade de Créditos</label>
-                <input type="number" value={creditAmount} onChange={(e) => setCreditAmount(Number(e.target.value))} className="w-full text-center text-4xl font-black py-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-purple-500 transition-all outline-none" />
+                <input 
+                  type="number" 
+                  value={creditAmount} 
+                  onChange={(e) => setCreditAmount(Number(e.target.value))} 
+                  className="w-full text-center text-4xl font-black py-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-purple-500 transition-all outline-none" 
+                />
               </div>
-              <button onClick={handleCredits} className={`w-full py-4 rounded-2xl font-black text-white shadow-lg transition-all active:scale-95 ${creditAmount > 0 ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'}`}>CONFIRMAR ALTERAÇÃO</button>
+              <button 
+                onClick={handleCredits} 
+                className={`w-full py-4 rounded-2xl font-black text-white shadow-lg transition-all active:scale-95 ${creditAmount > 0 ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'}`}
+              >
+                CONFIRMAR ALTERAÇÃO
+              </button>
               <button onClick={() => setModalType(null)} className="w-full text-slate-400 font-bold text-sm hover:text-slate-600 transition-colors">Cancelar</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL DE DETALHES - Corrigido z-index */}
+      {/* MODAL DE DETALHES */}
       {modalType === 'details' && (
         <div className="fixed inset-0 z- flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">

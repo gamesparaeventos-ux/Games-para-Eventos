@@ -25,7 +25,7 @@ export function WheelEditor() {
     const pres = new pptxgen();
     
     // Slide 1: A Roleta
-    let slide = pres.addSlide();
+    const slide = pres.addSlide();
     slide.background = { color: "FFFFFF" };
     slide.addText(gameData.title, { x: 0, y: 0.5, w: "100%", align: "center", fontSize: 40, color: gameData.primaryColor, bold: true });
 

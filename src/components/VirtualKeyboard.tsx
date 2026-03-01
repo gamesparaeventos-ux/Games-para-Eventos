@@ -8,6 +8,14 @@ interface VirtualKeyboardProps {
   inputType?: "text" | "numeric" | "email";
 }
 
+// Interface adicionada para tipar os botões do teclado e remover o erro de 'any'
+interface KeyButtonProps {
+  children: React.ReactNode;
+  onClick: () => void;
+  className?: string;
+  wide?: boolean;
+}
+
 const VirtualKeyboard = ({ onInput, onClose, initialValue = "", inputType = "text" }: VirtualKeyboardProps) => {
   const [value, setValue] = useState(initialValue);
   const [isUpperCase, setIsUpperCase] = useState(true);
@@ -44,7 +52,8 @@ const VirtualKeyboard = ({ onInput, onClose, initialValue = "", inputType = "tex
     onInput(newValue);
   };
 
-  const KeyButton = ({ children, onClick, className = "", wide = false }: any) => (
+  // Componente tipado corretamente aqui
+  const KeyButton = ({ children, onClick, className = "", wide = false }: KeyButtonProps) => (
     <button
       type="button"
       onClick={onClick}
@@ -61,7 +70,7 @@ const VirtualKeyboard = ({ onInput, onClose, initialValue = "", inputType = "tex
   );
 
   return (
-    <div className="fixed inset-x-0 bottom-0 bg-white border-t border-slate-200 p-4 z-[9999] shadow-[0_-10px_40px_rgba(0,0,0,0.1)] animate-in slide-in-from-bottom duration-300">
+    <div className="fixed inset-x-0 bottom-0 bg-white border-t border-slate-200 p-4 z- shadow-[0_-10px_40px_rgba(0,0,0,0.1)] animate-in slide-in-from-bottom duration-300">
       {/* Display */}
       <div className="mb-4 bg-slate-50 rounded-xl p-3 border border-slate-200 flex justify-between items-center">
         <span className="text-xl font-medium text-slate-800 ml-2">

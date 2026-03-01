@@ -2,13 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { RotateCcw, Trophy, Clock, Zap, Star, Heart, Music, Sun, Moon, Cloud, Ghost } from 'lucide-react';
 
 interface MemoryGameProps {
-  images?: string[]; // URLs das imagens personalizadas (opcional)
-  coverImage?: string; // Imagem do verso da carta (opcional)
-  primaryColor?: string;
+  images?: string[]; 
+  coverImage?: string; 
   onExit?: () => void;
 }
 
-// Ícones de fallback caso não tenha imagens configuradas
 const FALLBACK_ICONS = [
   { icon: <Star size={32} />, color: "text-yellow-500" },
   { icon: <Heart size={32} />, color: "text-red-500" },
@@ -22,33 +20,45 @@ const FALLBACK_ICONS = [
 
 interface Card {
   id: number;
-  contentId: number; // Identifica o par (0 a 7)
+  contentId: number; 
   isFlipped: boolean;
   isMatched: boolean;
 }
 
+// Gera as cartas iniciais sem precisar de useEffect
+const generateInitialDeck = () => {
+  const numPairs = 8;
+  const initialCards: Card[] = [];
+  for (let i = 0; i < numPairs; i++) {
+    initialCards.push({ id: i * 2, contentId: i, isFlipped: false, isMatched: false });
+    initialCards.push({ id: i * 2 + 1, contentId: i, isFlipped: false, isMatched: false });
+  }
+  return initialCards.sort(() => Math.random() - 0.5);
+};
+
 const MemoryGame: React.FC<MemoryGameProps> = ({ 
   images = [], 
   coverImage, 
-  primaryColor = '#8b5cf6', // Roxo
   onExit 
 }) => {
-  const [cards, setCards] = useState<Card[]>([]);
+  const [cards, setCards] = useState<Card[]>(generateInitialDeck);
   const [flippedCards, setFlippedCards] = useState<number[]>([]);
-  const [matchedPairs, setMatchedPairs] = useState<number>(0);
   const [moves, setMoves] = useState(0);
   const [timer, setTimer] = useState(0);
-  const [gameStarted, setGameStarted] = useState(false);
+  const [gameStarted, setGameStarted] = useState(true);
   const [gameWon, setGameWon] = useState(false);
 
-  // Inicializa o jogo
-  useEffect(() => {
-    startNewGame();
-  }, [images]);
+  const startNewGame = () => {
+    setCards(generateInitialDeck());
+    setFlippedCards([]);
+    setMoves(0);
+    setTimer(0);
+    setGameStarted(true);
+    setGameWon(false);
+  };
 
-  // Controle do Timer (CORRIGIDO AQUI PARA 'any')
   useEffect(() => {
-    let interval: any; 
+    let interval: ReturnType<typeof setInterval>; 
     if (gameStarted && !gameWon) {
       interval = setInterval(() => {
         setTimer((prev) => prev + 1);
@@ -57,68 +67,46 @@ const MemoryGame: React.FC<MemoryGameProps> = ({
     return () => clearInterval(interval);
   }, [gameStarted, gameWon]);
 
-  const startNewGame = () => {
-    // Define quantos pares usar (máximo 8 pares para grid 4x4)
-    const numPairs = 8;
-    
-    // Cria o array de pares
-    const initialCards: Card[] = [];
-    for (let i = 0; i < numPairs; i++) {
-      // Cria duas cartas para cada ID
-      initialCards.push({ id: i * 2, contentId: i, isFlipped: false, isMatched: false });
-      initialCards.push({ id: i * 2 + 1, contentId: i, isFlipped: false, isMatched: false });
-    }
-
-    // Embaralha
-    initialCards.sort(() => Math.random() - 0.5);
-
-    setCards(initialCards);
-    setFlippedCards([]);
-    setMatchedPairs(0);
-    setMoves(0);
-    setTimer(0);
-    setGameStarted(true);
-    setGameWon(false);
-  };
-
   const handleCardClick = (index: number) => {
-    // Bloqueia se já tiver 2 viradas, ou se a carta já estiver virada/encontrada
     if (flippedCards.length >= 2 || cards[index].isFlipped || cards[index].isMatched || gameWon) {
       return;
     }
 
-    // Vira a carta atual
     const newCards = [...cards];
-    newCards[index].isFlipped = true;
+    newCards[index] = { ...newCards[index], isFlipped: true };
     setCards(newCards);
 
     const newFlipped = [...flippedCards, index];
     setFlippedCards(newFlipped);
 
-    // Se virou a segunda carta
     if (newFlipped.length === 2) {
       setMoves((m) => m + 1);
       const [firstIndex, secondIndex] = newFlipped;
 
       if (newCards[firstIndex].contentId === newCards[secondIndex].contentId) {
-        // MATCH!
         setTimeout(() => {
-          newCards[firstIndex].isMatched = true;
-          newCards[secondIndex].isMatched = true;
-          setCards([...newCards]); 
-          setMatchedPairs((prev) => {
-            const newPairs = prev + 1;
-            if (newPairs === 8) setGameWon(true);
-            return newPairs;
+          setCards(prevCards => {
+             const updated = [...prevCards];
+             updated[firstIndex] = { ...updated[firstIndex], isMatched: true };
+             updated[secondIndex] = { ...updated[secondIndex], isMatched: true };
+             
+             const matchedCount = updated.filter(c => c.isMatched).length;
+             if (matchedCount === 16) { 
+               setGameWon(true);
+             }
+             
+             return updated;
           });
           setFlippedCards([]);
         }, 500);
       } else {
-        // NO MATCH - Desvira após delay
         setTimeout(() => {
-          newCards[firstIndex].isFlipped = false;
-          newCards[secondIndex].isFlipped = false;
-          setCards([...newCards]);
+          setCards(prevCards => {
+            const updated = [...prevCards];
+            updated[firstIndex] = { ...updated[firstIndex], isFlipped: false };
+            updated[secondIndex] = { ...updated[secondIndex], isFlipped: false };
+            return updated;
+          });
           setFlippedCards([]);
         }, 1000);
       }
@@ -131,7 +119,6 @@ const MemoryGame: React.FC<MemoryGameProps> = ({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Renderiza o conteúdo da carta
   const renderCardContent = (contentId: number) => {
     if (images && images.length > contentId) {
       return <img src={images[contentId]} alt="memory" className="w-full h-full object-cover" />;
@@ -182,7 +169,6 @@ const MemoryGame: React.FC<MemoryGameProps> = ({
 
   return (
     <div className="w-full h-full flex flex-col bg-slate-900 text-white overflow-hidden">
-      {/* Header */}
       <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50 backdrop-blur z-10">
         <div className="flex items-center gap-2">
            <span className="font-bold text-lg tracking-wide">Memória</span>
@@ -199,7 +185,6 @@ const MemoryGame: React.FC<MemoryGameProps> = ({
         </div>
       </div>
 
-      {/* Grid do Jogo */}
       <div className="flex-1 p-4 overflow-y-auto flex items-center justify-center min-h-0">
         <div className="grid grid-cols-4 gap-3 w-full max-w-md aspect-square mx-auto">
           {cards.map((card, index) => (
@@ -209,9 +194,8 @@ const MemoryGame: React.FC<MemoryGameProps> = ({
               className={`relative w-full h-full rounded-xl transition-all duration-300 transform perspective-1000 ${
                 card.isFlipped || card.isMatched ? 'rotate-y-180' : 'hover:scale-105'
               }`}
-              style={{ transformStyle: 'preserve-3d', minHeight: '60px' }} // Altura mínima para garantir visibilidade
+              style={{ transformStyle: 'preserve-3d', minHeight: '60px' }} 
             >
-              {/* Frente da Carta (Conteúdo) */}
               <div 
                 className={`absolute inset-0 bg-white rounded-xl flex items-center justify-center backface-hidden shadow-lg border-2 ${
                   card.isMatched ? 'border-green-400' : 'border-white'
@@ -224,7 +208,6 @@ const MemoryGame: React.FC<MemoryGameProps> = ({
                 {renderCardContent(card.contentId)}
               </div>
 
-              {/* Verso da Carta (Capa) */}
               <div 
                 className="absolute inset-0 bg-slate-800 rounded-xl flex items-center justify-center backface-hidden shadow-sm border border-slate-700"
                 style={{ backfaceVisibility: 'hidden' }}

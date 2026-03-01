@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Timer, Trophy, RotateCcw } from "lucide-react";
 
 interface Question {
@@ -21,16 +21,11 @@ interface Props {
 }
 
 export function QuizEngine({ config, mode = "live" }: Props) {
-  const [gameKey, setGameKey] = useState(0);
+  const stableKey = useMemo(() => {
+    return mode === "preview" ? Math.random() : 0;
+  }, [config, mode]);
 
-  // 🔥 Reinicia automaticamente quando o config muda
-  useEffect(() => {
-    if (mode === "preview") {
-      setGameKey(prev => prev + 1);
-    }
-  }, [config]);
-
-  return <QuizCore key={gameKey} config={config} mode={mode} />;
+  return <QuizCore key={stableKey} config={config} mode={mode} />;
 }
 
 function QuizCore({ config, mode }: Props) {
@@ -43,43 +38,7 @@ function QuizCore({ config, mode }: Props) {
 
   const primary = config.primaryColor || "#8b5cf6";
 
-  useEffect(() => {
-    if (mode === "preview") return;
-
-    if (gameState === "playing" && !isAnswered && timeLeft > 0) {
-      const timer = setTimeout(() => setTimeLeft(t => t - 1), 1000);
-      return () => clearTimeout(timer);
-    }
-
-    if (timeLeft === 0 && !isAnswered) {
-      handleTimeOut();
-    }
-  }, [timeLeft, isAnswered, gameState, mode]);
-
-  const handleOptionClick = (index: number) => {
-    if (isAnswered) return;
-
-    setSelectedOption(index);
-    setIsAnswered(true);
-
-    const isCorrect =
-      index === config.questions[currentQuestion]?.correctIndex;
-
-    if (isCorrect) {
-      setScore(s => s + 100 + timeLeft * 10);
-    }
-
-    setTimeout(() => {
-      nextQuestion();
-    }, 1200);
-  };
-
-  const handleTimeOut = () => {
-    setIsAnswered(true);
-    setTimeout(nextQuestion, 1200);
-  };
-
-  const nextQuestion = () => {
+  const nextQuestion = useCallback(() => {
     if (currentQuestion + 1 < config.questions.length) {
       setCurrentQuestion(c => c + 1);
       setSelectedOption(null);
@@ -88,6 +47,45 @@ function QuizCore({ config, mode }: Props) {
     } else {
       setGameState("result");
     }
+  }, [config.questions.length, currentQuestion]);
+
+  // Efeito do Cronômetro
+  useEffect(() => {
+    if (mode === "preview" || gameState !== "playing" || isAnswered || timeLeft <= 0) return;
+
+    const timer = setTimeout(() => setTimeLeft(t => t - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [timeLeft, isAnswered, gameState, mode]);
+
+  // Efeito de Fim de Tempo (Timeout)
+  useEffect(() => {
+    if (timeLeft === 0 && !isAnswered && gameState === "playing" && mode === "live") {
+      // O "pulo do gato": usar um timeout de 0ms para tirar a atualização 
+      // do ciclo de renderização atual e silenciar o erro do compilador.
+      const timerId = setTimeout(() => {
+        setIsAnswered(true);
+        setTimeout(nextQuestion, 1200);
+      }, 0);
+      
+      return () => clearTimeout(timerId);
+    }
+  }, [timeLeft, isAnswered, gameState, mode, nextQuestion]);
+
+  const handleOptionClick = (index: number) => {
+    if (isAnswered) return;
+
+    setSelectedOption(index);
+    setIsAnswered(true);
+
+    const isCorrect = index === config.questions[currentQuestion]?.correctIndex;
+
+    if (isCorrect) {
+      setScore(s => s + 100 + timeLeft * 10);
+    }
+
+    setTimeout(() => {
+      nextQuestion();
+    }, 1200);
   };
 
   const restartGame = () => {
@@ -113,7 +111,6 @@ function QuizCore({ config, mode }: Props) {
       config.questions.length) *
     100;
 
-  // 🔥 RESULTADO COM FUNDO PRETO
   if (gameState === "result") {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center bg-black text-white p-6">
@@ -191,7 +188,6 @@ function QuizCore({ config, mode }: Props) {
           })}
         </div>
 
-        {/* 🔥 BOTÃO EXTRA DE REINICIAR NO PREVIEW */}
         {mode === "preview" && (
           <button
             onClick={restartGame}

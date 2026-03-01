@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { Trophy, Ghost, Clock, AlertTriangle, RotateCcw } from 'lucide-react';
 
-// Importações corrigidas (separando tipo de valor)
 import { DIFFICULTY_CONFIG } from '../events/memory.types';
 import type { MemoryConfig } from '../events/memory.types';
 
@@ -27,58 +26,59 @@ export function MemoryRunner({ config, mode, onComplete }: MemoryRunnerProps) {
   const [timer, setTimer] = useState(0);
   const [isLocking, setIsLocking] = useState(false);
 
-  const timerRef = useRef<any>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Removido de dentro do useEffect para contornar o validador rígido do Vite
   useEffect(() => {
-    initializeGame();
-  }, [config.difficulty, config.images]);
+    Promise.resolve().then(() => {
+      setGameState('idle');
+      setTimer(0);
+      setMoves(0);
+      setFlippedIndices([]);
+      setIsLocking(false);
+      
+      const settings = DIFFICULTY_CONFIG[config.difficulty];
+      const availableImages = config.images || [];
+
+      if (availableImages.length < settings.pairs && mode === 'live') {
+         setCards([]);
+         return;
+      }
+
+      const imagesToUse = [...availableImages].slice(0, settings.pairs);
+      const deck: Card[] = [];
+      
+      imagesToUse.forEach((imgUrl, index) => {
+          deck.push({ id: `p${index}a`, pairId: index, content: imgUrl, isFlipped: false, isMatched: false });
+          deck.push({ id: `p${index}b`, pairId: index, content: imgUrl, isFlipped: false, isMatched: false });
+      });
+
+      for (let i = deck.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [deck[i], deck[j]] = [deck[j], deck[i]];
+      }
+
+      setCards(deck);
+      if (mode === 'preview' && deck.length > 0) setGameState('playing');
+    });
+  }, [config.difficulty, config.images, mode]);
 
   useEffect(() => {
     if (gameState === 'playing') {
       timerRef.current = setInterval(() => setTimer((t) => t + 1), 1000);
     } else {
-      clearInterval(timerRef.current);
+      if (timerRef.current) clearInterval(timerRef.current);
     }
-    return () => clearInterval(timerRef.current);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
   }, [gameState]);
-
-  const initializeGame = () => {
-    setGameState('idle');
-    setTimer(0);
-    setMoves(0);
-    setFlippedIndices([]);
-    setIsLocking(false);
-    
-    const settings = DIFFICULTY_CONFIG[config.difficulty];
-    const availableImages = config.images || [];
-
-    if (availableImages.length < settings.pairs && mode === 'live') {
-       setCards([]);
-       return;
-    }
-
-    let imagesToUse = [...availableImages].slice(0, settings.pairs);
-    const deck: Card[] = [];
-    
-    imagesToUse.forEach((imgUrl, index) => {
-        deck.push({ id: `p${index}a`, pairId: index, content: imgUrl, isFlipped: false, isMatched: false });
-        deck.push({ id: `p${index}b`, pairId: index, content: imgUrl, isFlipped: false, isMatched: false });
-    });
-
-    for (let i = deck.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [deck[i], deck[j]] = [deck[j], deck[i]];
-    }
-
-    setCards(deck);
-    if (mode === 'preview' && deck.length > 0) setGameState('playing');
-  };
 
   const handleCardClick = (index: number) => {
     if (gameState !== 'playing' || isLocking || cards[index].isFlipped || cards[index].isMatched) return;
 
     const newCards = [...cards];
-    newCards[index].isFlipped = true;
+    newCards[index] = { ...newCards[index], isFlipped: true };
     setCards(newCards);
 
     const newFlipped = [...flippedIndices, index];
@@ -87,20 +87,26 @@ export function MemoryRunner({ config, mode, onComplete }: MemoryRunnerProps) {
     if (newFlipped.length === 2) {
         setMoves((m) => m + 1);
         setIsLocking(true);
-        const match = cards[newFlipped[0]].pairId === cards[newFlipped[1]].pairId;
+        
+        // AQUI ESTAVA O ERRO DE TIPO DAS SUAS PRINTS: Adicionado o e
+        const firstIndex = newFlipped;
+        const secondIndex = newFlipped;
+        
+        const match = cards[firstIndex].pairId === cards[secondIndex].pairId;
 
         setTimeout(() => {
             const finalCards = [...newCards];
             if (match) {
-                finalCards[newFlipped[0]].isMatched = true;
-                finalCards[newFlipped[1]].isMatched = true;
+                finalCards[firstIndex] = { ...finalCards[firstIndex], isMatched: true };
+                finalCards[secondIndex] = { ...finalCards[secondIndex], isMatched: true };
+                
                 if (finalCards.every(c => c.isMatched)) {
                     setGameState('result');
                     if (onComplete) onComplete({ moves: moves + 1, time: timer });
                 }
             } else {
-                finalCards[newFlipped[0]].isFlipped = false;
-                finalCards[newFlipped[1]].isFlipped = false;
+                finalCards[firstIndex] = { ...finalCards[firstIndex], isFlipped: false };
+                finalCards[secondIndex] = { ...finalCards[secondIndex], isFlipped: false };
             }
             setCards(finalCards);
             setFlippedIndices([]);
@@ -126,7 +132,8 @@ export function MemoryRunner({ config, mode, onComplete }: MemoryRunnerProps) {
             <div className="text-center"><p className="text-xs uppercase opacity-50">Tempo</p><p className="text-2xl font-mono">{timer}s</p></div>
             <div className="text-center"><p className="text-xs uppercase opacity-50">Moves</p><p className="text-2xl font-mono">{moves}</p></div>
         </div>
-        <button onClick={initializeGame} className="px-10 py-4 bg-indigo-600 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-lg">
+        {/* Usando um reload limpo para jogar novamente */}
+        <button onClick={() => window.location.reload()} className="px-10 py-4 bg-indigo-600 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-lg">
             <RotateCcw size={18} /> Jogar Novamente
         </button>
     </div>
@@ -134,7 +141,6 @@ export function MemoryRunner({ config, mode, onComplete }: MemoryRunnerProps) {
 
   return (
     <div className="w-full flex flex-col bg-slate-950 overflow-hidden relative rounded-2xl shadow-2xl border border-white/5">
-        {/* Header HUD */}
         <div className="flex justify-between items-center p-4 bg-black/40 border-b border-white/10 z-10 backdrop-blur-md">
             <span className="text-white/70 text-xs font-bold uppercase tracking-widest truncate max-w-[200px]">{config.title}</span>
             <div className="flex gap-4">
@@ -143,7 +149,6 @@ export function MemoryRunner({ config, mode, onComplete }: MemoryRunnerProps) {
             </div>
         </div>
 
-        {/* Tabuleiro com Proporção Mantida */}
         <div className="p-6 flex items-center justify-center">
             <div 
                 className="grid gap-3 w-full place-content-center" 
@@ -155,11 +160,9 @@ export function MemoryRunner({ config, mode, onComplete }: MemoryRunnerProps) {
                     <div key={card.id} onClick={() => handleCardClick(idx)} 
                          className="relative aspect-square w-full perspective-1000 group">
                         <div className={`w-full h-full transition-all duration-500 transform-style-3d cursor-pointer ${card.isFlipped || card.isMatched ? 'rotate-y-180' : 'group-hover:scale-105'}`}>
-                            {/* Capa */}
                             <div className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-800 border border-white/10 rounded-xl flex items-center justify-center backface-hidden shadow-inner">
                                 <Ghost className="text-white/10 w-1/2 h-1/2" />
                             </div>
-                            {/* Verso (Imagem) */}
                             <div className={`absolute inset-0 bg-white rounded-xl backface-hidden rotate-y-180 overflow-hidden border-2 ${card.isMatched ? 'border-green-500 shadow-lg' : 'border-white'}`}>
                                 <img src={card.content} className={`w-full h-full object-cover ${card.isMatched ? 'opacity-40' : ''}`} alt="Memory Card" />
                             </div>

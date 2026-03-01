@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Play, X, Maximize2 } from "lucide-react";
 
-// --- COMPONENTES TEMPORÁRIOS (Para o erro sumir) ---
-// Quando você terminar de criar os arquivos reais, você apaga isso e volta a usar os imports.
+// --- COMPONENTES TEMPORÁRIOS ---
 const PlaceholderGame = ({ name }: { name: string }) => (
   <div className="w-full h-full flex flex-col items-center justify-center bg-slate-800 text-white">
     <h2 className="text-2xl font-bold mb-2">Jogo: {name}</h2>
@@ -10,23 +9,31 @@ const PlaceholderGame = ({ name }: { name: string }) => (
   </div>
 );
 
-const QuizGame = (props: any) => <PlaceholderGame name="Quiz" />;
-const MemoryGame = (props: any) => <PlaceholderGame name="Memória" />;
-const RouletteGame = (props: any) => <PlaceholderGame name="Roleta" />;
-const BalloonGame = (props: any) => <PlaceholderGame name="Balão" />;
+const QuizGame = () => <PlaceholderGame name="Quiz" />;
+const MemoryGame = () => <PlaceholderGame name="Memória" />;
+const RouletteGame = () => <PlaceholderGame name="Roleta" />;
+const BalloonGame = () => <PlaceholderGame name="Balão" />;
 // ---------------------------------------------------
+
+// Define a interface para o personalization para remover o erro do 'any'
+interface GamePersonalization {
+  backgroundUrl?: string;
+  [key: string]: unknown;
+}
 
 interface GamePreviewProps {
   gameType: "quiz" | "memoria" | "roleta" | "balao";
-  personalization: any;
+  personalization: GamePersonalization;
 }
 
 const GamePreview = ({ gameType, personalization }: GamePreviewProps) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [gameKey, setGameKey] = useState(0);
-
-  useEffect(() => { setGameKey(p => p + 1); }, [personalization]);
+  
+  // Usamos JSON.stringify para criar uma string única baseada no personalization
+  // Isso forçará a re-renderização do componente filho quando as props mudarem,
+  // sem precisar de um useEffect alterando um state diretamente.
+  const gameKey = JSON.stringify(personalization);
 
   const renderGame = () => {
     const props = { 
@@ -47,7 +54,7 @@ const GamePreview = ({ gameType, personalization }: GamePreviewProps) => {
   if (isPlaying) {
     if (isFullscreen) {
       return (
-        <div className="fixed inset-0 z-[100] bg-black">
+        <div className="fixed inset-0 z- bg-black">
           <button onClick={() => setIsPlaying(false)} className="absolute top-4 right-4 z-50 p-2 bg-white/10 rounded-full text-white hover:bg-white/20 transition-colors"><X/></button>
           {renderGame()}
         </div>

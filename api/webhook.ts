@@ -1,13 +1,24 @@
 import { createClient } from '@supabase/supabase-js';
 
-// 1. Usamos o '!' no final para o erro de 'string | undefined' sumir
 const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_URL || '',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 );
 
-// 2. Definimos req e res como ': any' para o erro de 'any implícito' sumir
-export default async function handler(req: any, res: any) {
+interface WebhookRequest {
+  body: {
+    data?: { id: string | number };
+    id?: string | number;
+  };
+}
+
+interface WebhookResponse {
+  status: (code: number) => WebhookResponse;
+  send: (body: string) => WebhookResponse;
+  json: (body: unknown) => WebhookResponse;
+}
+
+export default async function handler(req: WebhookRequest, res: WebhookResponse) {
   const paymentId = req.body?.data?.id || req.body?.id;
   if (!paymentId) return res.status(200).send('OK');
 
@@ -15,6 +26,8 @@ export default async function handler(req: any, res: any) {
     const mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
       headers: { Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}` }
     });
+
+    if (!mpResponse.ok) throw new Error('Falha ao validar no Mercado Pago');
     const paymentData = await mpResponse.json();
 
     if (paymentData.status === 'approved') {
@@ -22,7 +35,6 @@ export default async function handler(req: any, res: any) {
       const userId = paymentData.external_reference;
       const amount = paymentData.transaction_amount;
 
-      // 3. Atualiza o status usando o ID da preferência que vimos na sua tabela
       await supabase
         .from('payments')
         .update({ 
@@ -32,7 +44,6 @@ export default async function handler(req: any, res: any) {
         })
         .eq('mp_preference_id', preferenceId);
 
-      // 4. Soma os créditos (A lógica que subiu seu saldo para 241!)
       await supabase.rpc('add_user_credits', {
         user_id_input: userId,
         amount_input: amount
@@ -40,9 +51,9 @@ export default async function handler(req: any, res: any) {
     }
 
     return res.status(200).json({ success: true });
-  } catch (error: any) {
-    // 5. Definimos como ': any' para o erro de 'desconhecido' sumir
-    console.error('[ERRO]:', error?.message || error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('[ERRO WEBHOOK]:', errorMessage);
     return res.status(400).json({ error: 'Erro interno' });
   }
 }

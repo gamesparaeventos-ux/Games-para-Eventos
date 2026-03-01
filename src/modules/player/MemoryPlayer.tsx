@@ -77,7 +77,7 @@ export function MemoryPlayer() {
     // Se tiver menos imagens que o necessário, repete ou corta
     const selectedImages = images.slice(0, pairCount);
     
-    let deck: Card[] = [];
+    const deck: Card[] = [];
     selectedImages.forEach((img: string, idx: number) => {
       deck.push({ id: 0, pairId: idx, content: img, isFlipped: false, isMatched: false });
       deck.push({ id: 0, pairId: idx, content: img, isFlipped: false, isMatched: false });

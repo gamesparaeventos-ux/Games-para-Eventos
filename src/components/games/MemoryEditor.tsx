@@ -24,12 +24,12 @@ export function MemoryEditor() {
     const pres = new pptxgen();
     
     // Slide 1: Capa
-    let slide1 = pres.addSlide();
+    const slide1 = pres.addSlide();
     slide1.background = { color: gameData.primaryColor };
     slide1.addText(gameData.title, { x: 0, y: "45%", w: "100%", align: "center", fontSize: 44, color: "FFFFFF", bold: true });
 
     // Slide 2: O Tabuleiro (Gabarito)
-    let slide2 = pres.addSlide();
+    const slide2 = pres.addSlide();
     slide2.background = { color: "FFFFFF" };
     slide2.addText("Tabuleiro Completo (Gabarito)", { x: 0.5, y: 0.2, fontSize: 18, color: gameData.primaryColor });
 
