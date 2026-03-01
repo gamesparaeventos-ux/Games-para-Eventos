@@ -1,0 +1,61 @@
+import { useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
+// CORREÇÃO: Apenas 2 níveis para cima (../..) para achar 'lib'
+import { supabase } from '../../lib/supabase';
+import { Loader2, Lock } from 'lucide-react';
+
+import { QuizRunner } from './QuizRunner';
+// CORREÇÃO: Sai de 'player' (..) e entra em 'events'
+import type { QuizConfig } from '../events/quiz.types';
+import { LeadGate } from './LeadGate';
+
+export function QuizPlayer() {
+  const { id } = useParams();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [config, setConfig] = useState<QuizConfig | null>(null);
+  const [viewState, setViewState] = useState<'gate' | 'playing'>('gate');
+
+  useEffect(() => { loadGameSession(); }, [id]);
+
+  const loadGameSession = async () => {
+    if (!id) return;
+    try {
+      const { data, error } = await supabase.from('events').select('*').eq('id', id).single();
+      if (error) throw error;
+      if (!data) throw new Error('Evento não encontrado');
+      if (data.status !== 'active') { setError('Este jogo ainda não está ativo.'); return; }
+      const loadedConfig = data.config as QuizConfig;
+      setConfig(loadedConfig);
+      if (loadedConfig.skipLeadGate) setViewState('playing');
+      else setViewState('gate');
+    } catch (err: any) { setError(err.message || 'Erro ao carregar o jogo.'); } finally { setLoading(false); }
+  };
+
+  const handleLeadSubmit = () => { setViewState('playing'); };
+  const handleGameComplete = (finalScore: number) => { console.log('Final:', finalScore); };
+
+  if (loading) return <div className="min-h-screen bg-indigo-950 flex flex-col items-center justify-center text-white"><Loader2 size={40} className="animate-spin mb-4 text-purple-400" /></div>;
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
+        <div className="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full text-center border-b-4 border-slate-200">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4"><Lock size={32} className="text-red-500" /></div>
+          <h1 className="text-xl font-bold text-slate-800 mb-2">Acesso Restrito</h1>
+          <p className="text-slate-500 mb-6 text-sm">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!config) return null;
+
+  if (viewState === 'gate') return <LeadGate eventId={id!} config={config} blockReason={null} onPass={handleLeadSubmit} />;
+
+  return (
+    <div className="fixed inset-0 w-full h-full bg-black">
+        <QuizRunner config={config} mode="live" onComplete={handleGameComplete} />
+    </div>
+  );
+}
