@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { Trophy, RotateCcw, Clock, Target, ArrowLeft } from 'lucide-react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
+import { Trophy, RotateCcw, Clock } from 'lucide-react';
 import { ALL_BALLOON_COLORS } from '../events/balloon.types';
 import type { BalloonConfig, BalloonColor } from '../events/balloon.types';
 
@@ -16,7 +16,7 @@ interface BalloonRunnerProps {
   onComplete?: (score: number) => void;
 }
 
-export function BalloonRunner({ config, mode, onComplete }: BalloonRunnerProps) {
+export function BalloonRunner({ config, onComplete }: BalloonRunnerProps) {
   const [gameState, setGameState] = useState<'playing' | 'result'>('playing');
   const [score, setScore] = useState(0);
   const [timeLeft, setTimeLeft] = useState(config.duration);
@@ -26,9 +26,18 @@ export function BalloonRunner({ config, mode, onComplete }: BalloonRunnerProps) 
   const requestRef = useRef<number>(0);
   const lastSpawnTime = useRef(0);
   const lastTargetChange = useRef(0);
-  
-  // Filtra as cores que o usuário escolheu no editor
-  const gameColors = ALL_BALLOON_COLORS.filter(c => config.activeColors.includes(c.hex));
+  const scoreRef = useRef(score);
+
+  // Atualiza a ref sempre que o score mudar para o useEffect ter o valor fresco sem reiniciar
+  useEffect(() => {
+    scoreRef.current = score;
+  }, [score]);
+
+  // Filtra as cores e memoriza para evitar reinicializações do loop
+  const gameColors = useMemo(() => 
+    ALL_BALLOON_COLORS.filter(c => config.activeColors.includes(c.hex)),
+    [config.activeColors]
+  );
 
   useEffect(() => {
     if (gameState !== 'playing') return;
@@ -36,8 +45,9 @@ export function BalloonRunner({ config, mode, onComplete }: BalloonRunnerProps) 
     const timer = setInterval(() => {
       setTimeLeft(t => {
         if (t <= 1) {
+          clearInterval(timer);
           setGameState('result');
-          if (onComplete) onComplete(score);
+          if (onComplete) onComplete(scoreRef.current);
           return 0;
         }
         return t - 1;
@@ -45,30 +55,26 @@ export function BalloonRunner({ config, mode, onComplete }: BalloonRunnerProps) 
     }, 1000);
 
     const animate = (time: number) => {
-      // 1. Lógica de Nascimento (Spawn)
       const spawnRate = 2000 / (config.speed * 0.8) / (config.balloonCount / 3); 
       if (time - lastSpawnTime.current > spawnRate) {
         const randomColor = gameColors[Math.floor(Math.random() * gameColors.length)];
         const newBalloon: BalloonInstance = {
           id: Math.random(),
           colorData: randomColor,
-          x: Math.random() * 80 + 10, // Mantém longe das bordas (10% a 90%)
+          x: Math.random() * 80 + 10,
           speed: (Math.random() * 0.5 + 0.5) * config.speed
         };
         setBalloons(prev => [...prev, newBalloon]);
         lastSpawnTime.current = time;
       }
 
-      // 2. Mudança de Alvo (Target) a cada 7 segundos
       if (time - lastTargetChange.current > 7000) {
         const nextColor = gameColors[Math.floor(Math.random() * gameColors.length)];
         setTargetColor(nextColor);
         lastTargetChange.current = time;
       }
 
-      // 3. Limpeza de balões que saíram da tela (FIFO simples)
       setBalloons(prev => prev.length > 25 ? prev.slice(prev.length - 25) : prev);
-
       requestRef.current = requestAnimationFrame(animate);
     };
 
@@ -78,13 +84,12 @@ export function BalloonRunner({ config, mode, onComplete }: BalloonRunnerProps) 
       clearInterval(timer);
       cancelAnimationFrame(requestRef.current);
     };
-  }, [gameState, config, gameColors, score, onComplete]);
+  }, [gameState, config.speed, config.balloonCount, gameColors, onComplete]);
 
   const popBalloon = (e: React.PointerEvent, balloonId: number, colorId: string) => {
     e.stopPropagation();
     const isCorrect = colorId === targetColor.id;
     
-    // Feedback visual imediato
     const el = e.currentTarget as HTMLElement;
     el.style.transform = "scale(0)";
     el.style.opacity = "0";
@@ -124,16 +129,14 @@ export function BalloonRunner({ config, mode, onComplete }: BalloonRunnerProps) 
            backgroundPosition: 'center'
          }}>
       
-      {/* Overlay Escuro */}
       <div className="absolute inset-0 bg-black/30 pointer-events-none"></div>
 
-      {/* HUD (Cabeçalho de informações) */}
       <div className="absolute top-0 left-0 w-full p-4 flex justify-between items-center z-50 pointer-events-none">
         <div className="flex flex-col items-center">
           <span className="text-white/70 text-[10px] font-bold uppercase tracking-widest mb-1 drop-shadow-md">Estoure o:</span>
           <div className="flex items-center gap-2 bg-black/40 px-4 py-2 rounded-full backdrop-blur-md border border-white/20 shadow-xl pointer-events-auto">
-             <div className="w-3 h-3 rounded-full border border-white" style={{ backgroundColor: targetColor.hex }}></div>
-             <span className="text-white font-black text-sm uppercase tracking-wider">{targetColor.label}</span>
+              <div className="w-3 h-3 rounded-full border border-white" style={{ backgroundColor: targetColor.hex }}></div>
+              <span className="text-white font-black text-sm uppercase tracking-wider">{targetColor.label}</span>
           </div>
         </div>
 
@@ -147,7 +150,6 @@ export function BalloonRunner({ config, mode, onComplete }: BalloonRunnerProps) 
         </div>
       </div>
 
-      {/* ÁREA DE JOGO (BALÕES) */}
       <div className="absolute inset-0 z-10">
         {balloons.map(b => (
           <div
@@ -161,16 +163,12 @@ export function BalloonRunner({ config, mode, onComplete }: BalloonRunnerProps) 
             }}
           >
             <svg viewBox="0 0 100 125" className="w-full h-full drop-shadow-lg overflow-visible">
-              {/* String do balão */}
               <path d="M50 100 Q 50 130 60 145" stroke="rgba(255,255,255,0.4)" strokeWidth="2" fill="none" />
-              {/* Corpo do balão */}
               <path 
                 d="M50 0 C 20 0 0 30 0 55 C 0 85 40 100 50 105 C 60 100 100 85 100 55 C 100 30 80 0 50 0 Z" 
                 fill={b.colorData.hex} 
               />
-              {/* Brilho 3D */}
               <ellipse cx="30" cy="30" rx="10" ry="18" fill="white" fillOpacity="0.2" transform="rotate(-30 30 30)" />
-              {/* Logo customizada se houver */}
               {config.balloonLogoUrl && (
                 <image href={config.balloonLogoUrl} x="25" y="30" height="40" width="50" opacity="0.6" style={{ mixBlendMode: 'overlay' }} />
               )}

@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../../lib/supabase';
-import { Save, ArrowLeft, Upload, Trash2, Plus, Lock, CheckCircle, Loader2, Image as ImageIcon, Layout, HelpCircle } from 'lucide-react';
+import { Save, ArrowLeft, Upload, Trash2, Plus, Lock, CheckCircle, Loader2, Image as ImageIcon, HelpCircle } from 'lucide-react';
 
 import { QuizRunner } from '../../player/QuizRunner';
-// CORREÇÃO: Apenas volta um nível (..) pois o arquivo está na pasta 'events'
 import type { QuizConfig, QuizQuestion } from '../quiz.types';
 
 export function QuizEditor() {
@@ -26,27 +25,46 @@ export function QuizEditor() {
     questions: [{ question: '', options: ['', '', '', ''], correctIndex: 0 }]
   });
 
-  useEffect(() => { loadEvent(); }, [id]);
+  useEffect(() => { 
+    loadEvent(); 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   const loadEvent = async () => {
     if (!id) return;
     try {
-      const { data } = await supabase.from('events').select('*').eq('id', id).single();
+      const { data, error } = await supabase.from('events').select('*').eq('id', id).single();
+      if (error) throw error;
       if (data) {
         if (data.config) setConfig(prev => ({ ...prev, ...data.config }));
         setStatus(data.status);
       }
-    } catch (e) { console.error(e); } finally { setLoading(false); }
+    } catch (e) { 
+      console.error(e); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const saveEvent = async () => {
     const validQuestions = config.questions.filter((q) => q.question.trim() !== '');
     if (validQuestions.length === 0) return alert('Adicione pelo menos uma pergunta válida.');
+    
     setSaving(true);
-    const { error } = await supabase.from('events').update({ config: { ...config, questions: validQuestions } }).eq('id', id);
-    setSaving(false);
-    if (error) alert('Erro ao salvar: ' + error.message);
-    else alert('Salvo com sucesso!');
+    try {
+      const { error } = await supabase
+        .from('events')
+        .update({ config: { ...config, questions: validQuestions } })
+        .eq('id', id);
+      
+      if (error) throw error;
+      alert('Salvo com sucesso!');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Erro desconhecido';
+      alert('Erro ao salvar: ' + msg);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const activateEvent = async () => {
@@ -55,39 +73,74 @@ export function QuizEditor() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data: profile } = await supabase.from('profiles').select('credits').eq('id', user.id).single();
-      if (!profile || profile.credits < 1) throw new Error('Sem créditos.');
-      await supabase.from('profiles').update({ credits: profile.credits - 1 }).eq('id', user.id);
-      await supabase.from('events').update({ status: 'active' }).eq('id', id);
+      
+      const { data: profile, error: profileError } = await supabase.from('profiles').select('credits').eq('id', user.id).single();
+      if (profileError) throw profileError;
+      if (!profile || profile.credits < 1) throw new Error('Sem créditos disponíveis.');
+
+      const { error: updateCreditError } = await supabase.from('profiles').update({ credits: profile.credits - 1 }).eq('id', user.id);
+      if (updateCreditError) throw updateCreditError;
+
+      const { error: eventError } = await supabase.from('events').update({ status: 'active' }).eq('id', id);
+      if (eventError) throw eventError;
+
       setStatus('active');
-      alert('Ativado!');
-    } catch (err: any) { alert(err.message); } finally { setSaving(false); }
+      alert('Evento ativado com sucesso!');
+    } catch (err) { 
+      const msg = err instanceof Error ? err.message : 'Erro na ativação';
+      alert(msg); 
+    } finally { 
+      setSaving(false); 
+    }
   };
 
   const handleUpload = async (field: 'logoUrl' | 'backgroundImageUrl', e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !id) return;
     try {
       const path = `quiz-${id}-${field}-${Date.now()}`;
       const { error } = await supabase.storage.from('uploads').upload(path, file);
       if (error) throw error;
+      
       const { data } = supabase.storage.from('uploads').getPublicUrl(path);
-      setConfig({ ...config, [field]: data.publicUrl });
-    } catch (e: any) { alert('Erro no upload: ' + e.message); }
+      setConfig(prev => ({ ...prev, [field]: data.publicUrl }));
+    } catch (e) { 
+      const msg = e instanceof Error ? e.message : 'Erro no upload';
+      alert('Erro no upload: ' + msg); 
+    }
   };
 
-  const addQuestion = () => setConfig({...config, questions: [...config.questions, { question: '', options: ['', '', '', ''], correctIndex: 0 }]});
+  const addQuestion = () => setConfig(prev => ({
+    ...prev, 
+    questions: [...prev.questions, { question: '', options: ['', '', '', ''], correctIndex: 0 }]
+  }));
   
-  // CORREÇÃO: Tipagem explicita (_: any) para evitar erro
   const removeQuestion = (index: number) => { 
     if(config.questions.length > 1) {
-      setConfig({...config, questions: config.questions.filter((_: any, i: number) => i !== index)});
+      setConfig(prev => ({
+        ...prev, 
+        questions: prev.questions.filter((_, i) => i !== index)
+      }));
     }
   };
   
-  const updateQuestionText = (index: number, text: string) => { const n = [...config.questions]; n[index].question = text; setConfig({...config, questions: n}); };
-  const updateOption = (qI: number, oI: number, t: string) => { const n = [...config.questions]; n[qI].options[oI] = t; setConfig({...config, questions: n}); };
-  const setCorrectAnswer = (qI: number, oI: number) => { const n = [...config.questions]; n[qI].correctIndex = oI; setConfig({...config, questions: n}); };
+  const updateQuestionText = (index: number, text: string) => { 
+    const n = [...config.questions]; 
+    n[index].question = text; 
+    setConfig(prev => ({...prev, questions: n})); 
+  };
+
+  const updateOption = (qI: number, oI: number, t: string) => { 
+    const n = [...config.questions]; 
+    n[qI].options[oI] = t; 
+    setConfig(prev => ({...prev, questions: n})); 
+  };
+
+  const setCorrectAnswer = (qI: number, oI: number) => { 
+    const n = [...config.questions]; 
+    n[qI].correctIndex = oI; 
+    setConfig(prev => ({...prev, questions: n})); 
+  };
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-purple-600" /></div>;
 
@@ -95,7 +148,7 @@ export function QuizEditor() {
     <div className="min-h-screen bg-slate-50 font-sans pb-20">
       <header className="bg-white border-b px-6 py-4 sticky top-0 z-30 flex justify-between shadow-sm">
         <div className="flex items-center gap-4">
-          <button onClick={() => navigate('/games')} className="p-2 hover:bg-slate-100 rounded-full"><ArrowLeft size={20} /></button>
+          <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-slate-100 rounded-full"><ArrowLeft size={20} /></button>
           <h1 className="text-xl font-bold text-slate-800">Editor de Quiz</h1>
         </div>
         <div className="flex gap-3">
@@ -112,11 +165,11 @@ export function QuizEditor() {
                 <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2"><ImageIcon size={20} className="text-purple-600"/> Aparência</h3>
                 <div className="grid grid-cols-2 gap-4">
                     <div onClick={() => logoInputRef.current?.click()} className="aspect-video rounded-xl border-2 border-dashed border-slate-300 hover:border-purple-500 hover:bg-purple-50 cursor-pointer flex flex-col items-center justify-center relative overflow-hidden transition-all group">
-                        {config.logoUrl ? <img src={config.logoUrl} className="h-full object-contain" /> : <><Upload className="text-slate-400 mb-2 group-hover:text-purple-500" /><span className="text-xs font-bold text-slate-500">Logo</span></>}
+                        {config.logoUrl ? <img src={config.logoUrl} className="h-full object-contain" alt="Logo" /> : <><Upload className="text-slate-400 mb-2 group-hover:text-purple-500" /><span className="text-xs font-bold text-slate-500">Logo</span></>}
                         <input type="file" className="hidden" ref={logoInputRef} onChange={e => handleUpload('logoUrl', e)} accept="image/*" />
                     </div>
                     <div onClick={() => bgInputRef.current?.click()} className="aspect-video rounded-xl border-2 border-dashed border-slate-300 hover:border-purple-500 hover:bg-purple-50 cursor-pointer flex flex-col items-center justify-center relative overflow-hidden transition-all group">
-                        {config.backgroundImageUrl ? <img src={config.backgroundImageUrl} className="w-full h-full object-cover" /> : <><ImageIcon className="text-slate-400 mb-2 group-hover:text-purple-500" /><span className="text-xs font-bold text-slate-500">Fundo</span></>}
+                        {config.backgroundImageUrl ? <img src={config.backgroundImageUrl} className="w-full h-full object-cover" alt="Fundo" /> : <><ImageIcon className="text-slate-400 mb-2 group-hover:text-purple-500" /><span className="text-xs font-bold text-slate-500">Fundo</span></>}
                         <input type="file" className="hidden" ref={bgInputRef} onChange={e => handleUpload('backgroundImageUrl', e)} accept="image/*" />
                     </div>
                 </div>

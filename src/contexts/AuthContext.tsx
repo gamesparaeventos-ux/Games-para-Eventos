@@ -3,9 +3,7 @@ import type { ReactNode } from "react";
 import type { User, Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 
-// Como não temos os types completos do banco gerados ainda, usamos any temporariamente 
-// ou uma tipagem básica para garantir o funcionamento.
-type Profile = any;
+type Profile = Record<string, unknown>;
 
 interface AuthContextType {
   user: User | null;
@@ -31,7 +29,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     let isMounted = true;
 
-    // Listener de estado em tempo real (Zero Trust)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
       if (isMounted) {
         setSession(currentSession);
@@ -40,7 +37,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     });
 
-    // Verificação inicial
     supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
       if (isMounted) {
         setSession(initialSession);
@@ -55,7 +51,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
-  // Busca do Perfil
   useEffect(() => {
     let isMounted = true;
 
@@ -80,10 +75,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         if (error) throw error;
         
-        if (isMounted) setProfile(data);
-      } catch (err: any) {
+        if (isMounted) setProfile(data as Profile);
+      } catch (err) {
         console.error("[AuthContext] Erro ao buscar perfil:", err);
-        if (isMounted) setProfileError(err.message);
+        if (isMounted) setProfileError(err instanceof Error ? err.message : String(err));
       } finally {
         if (isMounted) setProfileLoading(false);
       }
@@ -94,7 +89,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => {
       isMounted = false;
     };
-  }, [user?.id]);
+  }, [user]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -118,10 +113,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-export const useAuth = () => {
+// Ignora o aviso de Fast Refresh apenas para esta exportação
+// eslint-disable-next-line react-refresh/only-export-components
+export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
     throw new Error("useAuth deve ser usado dentro de um AuthProvider");
   }
   return context;
-};
+}

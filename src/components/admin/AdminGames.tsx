@@ -2,7 +2,7 @@ import React from "react";
 import AdminLayout from "../../layouts/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
-import { Gamepad2, Layers, Star, Info } from "lucide-react";
+import { Gamepad2, Star, Info } from "lucide-react";
 
 const GAME_TEMPLATES = [
   { id: 'quiz', name: 'Quiz Interativo', category: 'Educativo', status: 'Ativo', popularidade: 'Alta' },

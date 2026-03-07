@@ -58,7 +58,7 @@ export default function AdminLeads() {
   const filteredLeads = leads?.filter(lead => 
     lead.name?.toLowerCase().includes(search.toLowerCase()) ||
     lead.email?.toLowerCase().includes(search.toLowerCase()) ||
-    (lead.events as any)?.name?.toLowerCase().includes(search.toLowerCase())
+    (lead.events as { name?: string })?.name?.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -123,7 +123,7 @@ export default function AdminLeads() {
                         </td>
                         <td className="px-6 py-4">
                           <span className="text-xs font-bold bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md border border-slate-200">
-                            {(lead.events as any)?.name || "Evento não identificado"}
+                            {(lead.events as { name?: string })?.name || "Evento não identificado"}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-slate-500 flex items-center gap-1.5">

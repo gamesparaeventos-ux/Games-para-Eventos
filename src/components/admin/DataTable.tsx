@@ -1,3 +1,5 @@
+"use no memo";
+
 import {
   flexRender,
   getCoreRowModel,
@@ -23,6 +25,8 @@ export function DataTable<TData, TValue>({
   onPaginationChange,
   isLoading,
 }: DataTableProps<TData, TValue>) {
+  // CORREÇÃO: Adicionando o ignore para o linter parar de avisar sobre a incompatibilidade
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns,

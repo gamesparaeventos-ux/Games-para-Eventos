@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { RotateCcw, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 
 interface RouletteGameProps {
   prizes?: string[];
@@ -11,9 +11,10 @@ interface RouletteGameProps {
 
 const COLORS = ["#EF4444", "#3B82F6", "#22C55E", "#EAB308", "#A855F7", "#EC4899", "#F97316", "#14B8A6"];
 
-const RouletteGame = ({ prizes = ["Prêmio 1", "Prêmio 2"], logoUrl, backgroundUrl, onFinish, onExit }: RouletteGameProps) => {
+const RouletteGame = ({ prizes = ["Prêmio 1", "Prêmio 2"], logoUrl, backgroundUrl, onFinish }: RouletteGameProps) => {
   const [gameState, setGameState] = useState<"start" | "spinning" | "result">("start");
   const [rotation, setRotation] = useState(0);
+  const [wonPrize, setWonPrize] = useState<string>("");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const premioFinalRef = useRef<string | null>(null);
 
@@ -52,7 +53,8 @@ const RouletteGame = ({ prizes = ["Prêmio 1", "Prêmio 2"], logoUrl, background
   const spin = () => {
     if (gameState === 'spinning') return;
     const index = Math.floor(Math.random() * prizes.length);
-    premioFinalRef.current = prizes[index];
+    const selectedPrize = prizes[index];
+    premioFinalRef.current = selectedPrize;
     
     const sliceAngle = 360 / prizes.length;
     const targetAngle = 360 - (index * sliceAngle + sliceAngle / 2);
@@ -61,8 +63,9 @@ const RouletteGame = ({ prizes = ["Prêmio 1", "Prêmio 2"], logoUrl, background
     setRotation(spins + targetAngle);
     
     setTimeout(() => {
+      setWonPrize(selectedPrize);
       setGameState("result");
-      onFinish?.(premioFinalRef.current!);
+      onFinish?.(selectedPrize);
     }, 4000);
   };
 
@@ -72,8 +75,8 @@ const RouletteGame = ({ prizes = ["Prêmio 1", "Prêmio 2"], logoUrl, background
         <div className="bg-white p-10 rounded-3xl text-center shadow-xl animate-bounce-in">
           <Sparkles className="w-16 h-16 text-yellow-400 mx-auto mb-4"/>
           <h2 className="text-2xl font-bold">Parabéns!</h2>
-          <p className="text-4xl font-black text-purple-600 my-4">{premioFinalRef.current}</p>
-          <button onClick={() => { setGameState("start"); setRotation(0); }} className="px-6 py-3 bg-slate-900 text-white rounded-xl font-bold">Girar Novamente</button>
+          <p className="text-4xl font-black text-purple-600 my-4">{wonPrize}</p>
+          <button onClick={() => { setGameState("start"); setRotation(0); setWonPrize(""); }} className="px-6 py-3 bg-slate-900 text-white rounded-xl font-bold">Girar Novamente</button>
         </div>
       </div>
     );
@@ -81,7 +84,7 @@ const RouletteGame = ({ prizes = ["Prêmio 1", "Prêmio 2"], logoUrl, background
 
   return (
     <div className="h-full flex flex-col items-center justify-center bg-purple-600 p-4 relative" style={backgroundUrl ? { backgroundImage: `url(${backgroundUrl})`, backgroundSize: 'cover' } : {}}>
-      {logoUrl && <img src={logoUrl} className="h-20 object-contain mb-8 z-10" />}
+      {logoUrl && <img src={logoUrl} alt="Logo" className="h-20 object-contain mb-8 z-10" />}
       <div className="w-0 h-0 border-l-[20px] border-l-transparent border-r-[20px] border-r-transparent border-t-[40px] border-t-white absolute top-[20%] z-20 drop-shadow-lg"></div>
       <div style={{ transform: `rotate(${rotation}deg)`, transition: 'transform 4s cubic-bezier(0.2, 0.8, 0.2, 1)' }} className="rounded-full shadow-2xl border-4 border-white">
         <canvas ref={canvasRef} width={320} height={320} />

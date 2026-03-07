@@ -8,7 +8,7 @@ interface PaymentModalProps {
   onSuccess?: () => void;
 }
 
-export function PaymentModal({ isOpen, onClose }: PaymentModalProps) {
+export function PaymentModal({ isOpen, onClose, onSuccess }: PaymentModalProps) {
   const [loading, setLoading] = useState(false);
 
   if (!isOpen) return null;
@@ -70,14 +70,15 @@ export function PaymentModal({ isOpen, onClose }: PaymentModalProps) {
 
       const newWindow = window.open(data.init_point, '_blank');
       
-      if (!newWindow || newWindow.closed || typeof newWindow.closed == 'undefined') { 
-        alert("O navegador bloqueou a abertura da aba de pagamento. Clique em 'Pagar' novamente ou verifique os popups.");
+      if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') { 
+        alert("O navegador bloqueou a abertura da aba de pagamento. Redirecionando nesta aba...");
         window.location.href = data.init_point;
       }
 
+      if (onSuccess) onSuccess();
       setLoading(false);
 
-    } catch (error: any) {
+    } catch (error) {
       console.error('Erro fatal no Frontend:', error);
       alert('Erro de conexão. Verifique sua internet e tente novamente.');
       setLoading(false);
@@ -85,7 +86,7 @@ export function PaymentModal({ isOpen, onClose }: PaymentModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z- flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       
       <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
         

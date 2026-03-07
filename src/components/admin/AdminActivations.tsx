@@ -4,7 +4,7 @@ import { supabase } from "../../lib/supabase";
 import AdminLayout from "../../layouts/AdminLayout";
 import { Card, CardContent } from "../ui/card";
 import { Badge } from "../ui/badge";
-import { Key, User, Hash, CheckCircle2 } from "lucide-react";
+import { Key } from "lucide-react";
 
 export default function AdminActivations() {
   const { data: activations, isLoading } = useQuery({
@@ -59,8 +59,8 @@ export default function AdminActivations() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex flex-col">
-                            <span className="font-bold text-slate-900">{(act.profiles as any)?.name || "N/A"}</span>
-                            <span className="text-xs text-slate-400">{(act.profiles as any)?.email}</span>
+                            <span className="font-bold text-slate-900">{(act.profiles as { name?: string; email?: string })?.name || "N/A"}</span>
+                            <span className="text-xs text-slate-400">{(act.profiles as { name?: string; email?: string })?.email}</span>
                           </div>
                         </td>
                         <td className="px-6 py-4">

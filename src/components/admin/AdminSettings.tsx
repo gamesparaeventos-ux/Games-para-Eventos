@@ -23,7 +23,8 @@ export default function AdminSettings() {
   useEffect(() => {
     async function loadConfig() {
       try {
-        const { data, error } = await supabase
+        // Removido 'error' que não estava sendo utilizado para corrigir o aviso do ESLint
+        const { data } = await supabase
           .from("system_settings")
           .select("value")
           .eq("key", "platform_config")

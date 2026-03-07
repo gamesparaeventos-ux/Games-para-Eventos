@@ -2,8 +2,18 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Search, Download, Filter, User, Users, Calendar } from 'lucide-react';
 
+interface Lead {
+  id: string;
+  name?: string;
+  email?: string;
+  whatsapp?: string;
+  score?: number;
+  created_at: string;
+  events?: { name: string };
+}
+
 export function LeadsPage() {
-  const [leads, setLeads] = useState<any[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -24,7 +34,7 @@ export function LeadsPage() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setLeads(data || []);
+      setLeads((data as Lead[]) || []);
     } catch (error) {
       console.error('Erro ao buscar leads:', error);
     } finally {
@@ -40,7 +50,7 @@ export function LeadsPage() {
   const exportCSV = () => {
     const headers = ['Nome,Email,Whatsapp,Score,Evento,Data'];
     const rows = filteredLeads.map(l => 
-      `${l.name},${l.email},${l.whatsapp},${l.score},${l.events?.name || 'N/A'},${new Date(l.created_at).toLocaleDateString()}`
+      `${l.name || ''},${l.email || ''},${l.whatsapp || ''},${l.score || 0},${l.events?.name || 'N/A'},${new Date(l.created_at).toLocaleDateString()}`
     );
     const csvContent = "data:text/csv;charset=utf-8," + [headers, ...rows].join("\n");
     const encodedUri = encodeURI(csvContent);
@@ -49,6 +59,7 @@ export function LeadsPage() {
     link.setAttribute("download", "leads_export.csv");
     document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
   };
 
   return (
@@ -133,11 +144,11 @@ export function LeadsPage() {
               ) : (
                 filteredLeads.map((lead) => (
                   <tr key={lead.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 font-bold text-slate-800">{lead.name}</td>
+                    <td className="px-6 py-4 font-bold text-slate-800">{lead.name || '-'}</td>
                     <td className="px-6 py-4">{lead.whatsapp || '-'}</td>
                     <td className="px-6 py-4">{lead.email || '-'}</td>
                     <td className="px-6 py-4"><span className="bg-purple-50 text-purple-700 px-2 py-1 rounded text-xs font-bold">{lead.events?.name || 'Geral'}</span></td>
-                    <td className="px-6 py-4 font-mono text-slate-500">{lead.score}</td>
+                    <td className="px-6 py-4 font-mono text-slate-500">{lead.score || 0}</td>
                     <td className="px-6 py-4 text-xs text-slate-400">{new Date(lead.created_at).toLocaleDateString()}</td>
                   </tr>
                 ))

@@ -1,12 +1,10 @@
-import React, { useState } from "react";
+import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../../lib/supabase";
 import AdminLayout from "../../layouts/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
-import { RefreshCcw, User, DollarSign, Calendar, AlertCircle, CheckCircle2, XCircle } from "lucide-react";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { RefreshCcw, AlertCircle, CheckCircle2, XCircle } from "lucide-react";
 
 export default function AdminRefunds() {
   const { data: refunds, isLoading } = useQuery({
@@ -69,8 +67,8 @@ export default function AdminRefunds() {
                       <tr key={refund.id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="px-6 py-4">
                           <div className="flex flex-col">
-                            <span className="font-bold text-slate-900">{(refund.profiles as any)?.name || "N/A"}</span>
-                            <span className="text-xs text-slate-400">{(refund.profiles as any)?.email}</span>
+                            <span className="font-bold text-slate-900">{(refund.profiles as { name?: string; email?: string })?.name || "N/A"}</span>
+                            <span className="text-xs text-slate-400">{(refund.profiles as { name?: string; email?: string })?.email}</span>
                           </div>
                         </td>
                         <td className="px-6 py-4 font-black text-slate-700">

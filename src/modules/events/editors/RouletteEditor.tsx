@@ -34,71 +34,103 @@ export function RouletteEditor() {
     setPreviewKey(prev => prev + 1);
   }, [config.items, config.backgroundImageUrl, config.logoUrl, config.outerRimColor, config.ledColor, config.title]);
 
-  useEffect(() => { loadEvent(); }, [id]);
+  useEffect(() => { 
+    loadEvent(); 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   const loadEvent = async () => {
     if (!id) return;
     try {
-      const { data } = await supabase.from('events').select('*').eq('id', id).single();
+      const { data, error } = await supabase.from('events').select('*').eq('id', id).single();
+      if (error) throw error;
       if (data && data.config) {
         setConfig(prev => ({ ...prev, ...data.config }));
         setStatus(data.status);
       }
-    } catch (e) { console.error(e); } finally { setLoading(false); }
+    } catch (e) { 
+      console.error('Erro ao carregar evento:', e); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const saveEvent = async () => {
+    if (!id) return;
     if (config.items.length < 2) return alert('A roleta precisa de pelo menos 2 prêmios.');
+    
     setSaving(true);
-    const { error } = await supabase.from('events').update({ config }).eq('id', id);
-    setSaving(false);
-    if (error) alert('Erro ao salvar: ' + error.message);
-    else alert('Configurações salvas!');
+    try {
+      const { error } = await supabase.from('events').update({ config }).eq('id', id);
+      if (error) throw error;
+      alert('Configurações salvas!');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Erro desconhecido';
+      alert('Erro ao salvar: ' + msg);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const activateEvent = async () => {
+    if (!id) return;
     if (!confirm('Ativar por 1 crédito?')) return;
+    
     setSaving(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       
-      const { data: profile } = await supabase.from('profiles').select('credits').eq('id', user.id).single();
+      const { data: profile, error: profileError } = await supabase.from('profiles').select('credits').eq('id', user.id).single();
+      if (profileError) throw profileError;
       if (!profile || profile.credits < 1) throw new Error('Sem créditos disponíveis.');
       
-      await supabase.from('profiles').update({ credits: profile.credits - 1 }).eq('id', user.id);
-      await supabase.from('events').update({ status: 'active' }).eq('id', id);
+      const { error: updateCreditError } = await supabase.from('profiles').update({ credits: profile.credits - 1 }).eq('id', user.id);
+      if (updateCreditError) throw updateCreditError;
+
+      const { error: eventError } = await supabase.from('events').update({ status: 'active' }).eq('id', id);
+      if (eventError) throw eventError;
       
       setStatus('active');
       alert('Evento ativado com sucesso!');
-    } catch (err: any) { alert(err.message); } finally { setSaving(false); }
+    } catch (err) { 
+      const msg = err instanceof Error ? err.message : 'Erro na ativação';
+      alert(msg); 
+    } finally { 
+      setSaving(false); 
+    }
   };
 
   const handleUpload = async (field: 'logoUrl' | 'backgroundImageUrl', e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !id) return;
     try {
       const path = `roulette-${id}-${field}-${Date.now()}`;
-      await supabase.storage.from('uploads').upload(path, file);
+      const { error: uploadError } = await supabase.storage.from('uploads').upload(path, file);
+      if (uploadError) throw uploadError;
+      
       const { data } = supabase.storage.from('uploads').getPublicUrl(path);
-      setConfig({ ...config, [field]: data.publicUrl });
-    } catch (e) { alert('Erro no upload'); }
+      setConfig(prev => ({ ...prev, [field]: data.publicUrl }));
+    } catch (err) { 
+      const msg = err instanceof Error ? err.message : 'Erro no upload';
+      alert('Erro no upload: ' + msg); 
+    }
   };
 
   const addPrize = () => {
     if (config.items.length >= 12) return alert('Máximo de 12 itens permitidos.');
-    setConfig({ ...config, items: [...config.items, `Novo Item`] });
+    setConfig(prev => ({ ...prev, items: [...prev.items, `Novo Item`] }));
   };
 
   const removePrize = (idx: number) => {
     if (config.items.length <= 2) return alert('A roleta deve ter no mínimo 2 itens.');
-    setConfig({ ...config, items: config.items.filter((_, i) => i !== idx) });
+    setConfig(prev => ({ ...prev, items: prev.items.filter((_, i) => i !== idx) }));
   };
 
   const updatePrize = (idx: number, val: string) => {
     const newItems = [...config.items];
     newItems[idx] = val;
-    setConfig({ ...config, items: newItems });
+    setConfig(prev => ({ ...prev, items: newItems }));
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-purple-600" /></div>;
@@ -108,7 +140,7 @@ export function RouletteEditor() {
       
       <header className="bg-white border-b px-6 py-4 sticky top-0 z-30 flex justify-between shadow-sm">
         <div className="flex items-center gap-4">
-          <button onClick={() => navigate('/games')} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><ArrowLeft size={20} /></button>
+          <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-slate-100 rounded-full transition-colors" aria-label="Voltar"><ArrowLeft size={20} /></button>
           <h1 className="text-xl font-bold text-slate-800">Editor de Roleta</h1>
         </div>
         <div className="flex gap-3">
@@ -144,11 +176,11 @@ export function RouletteEditor() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div onClick={() => logoInputRef.current?.click()} className="aspect-video rounded-xl border-2 border-dashed border-slate-300 hover:border-purple-500 cursor-pointer flex flex-col items-center justify-center overflow-hidden transition-all bg-slate-50 group">
-               {config.logoUrl ? <img src={config.logoUrl} className="h-full object-contain" /> : <><Upload className="text-slate-400 group-hover:text-purple-500 mb-2" /><span className="text-xs font-bold text-slate-500">Logo Evento</span></>}
+               {config.logoUrl ? <img src={config.logoUrl} className="h-full object-contain" alt="Logo do Evento" /> : <><Upload className="text-slate-400 group-hover:text-purple-500 mb-2" /><span className="text-xs font-bold text-slate-500">Logo Evento</span></>}
                <input type="file" className="hidden" ref={logoInputRef} onChange={e => handleUpload('logoUrl', e)} accept="image/*" />
             </div>
             <div onClick={() => bgInputRef.current?.click()} className="aspect-video rounded-xl border-2 border-dashed border-slate-300 hover:border-purple-500 cursor-pointer flex flex-col items-center justify-center overflow-hidden transition-all bg-slate-50 group">
-               {config.backgroundImageUrl ? <img src={config.backgroundImageUrl} className="w-full h-full object-cover" /> : <><ImageIcon className="text-slate-400 group-hover:text-purple-500 mb-2" /><span className="text-xs font-bold text-slate-500">Imagem Fundo</span></>}
+               {config.backgroundImageUrl ? <img src={config.backgroundImageUrl} className="w-full h-full object-cover" alt="Imagem de Fundo" /> : <><ImageIcon className="text-slate-400 group-hover:text-purple-500 mb-2" /><span className="text-xs font-bold text-slate-500">Imagem Fundo</span></>}
                <input type="file" className="hidden" ref={bgInputRef} onChange={e => handleUpload('backgroundImageUrl', e)} accept="image/*" />
             </div>
           </div>
@@ -185,7 +217,7 @@ export function RouletteEditor() {
               <div key={idx} className="group flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 hover:border-purple-300 transition-all">
                 <div className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-black shadow-sm flex-shrink-0" style={{ backgroundColor: ROULETTE_PALETTE[idx % ROULETTE_PALETTE.length] }}>{idx + 1}</div>
                 <input type="text" value={item} onChange={e => updatePrize(idx, e.target.value)} className="flex-1 bg-transparent border-none outline-none font-bold text-slate-700 placeholder:text-slate-300" placeholder="Nome do Prêmio" />
-                <button onClick={() => removePrize(idx)} className="p-2 text-slate-400 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"><Trash2 size={18} /></button>
+                <button onClick={() => removePrize(idx)} className="p-2 text-slate-400 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100" aria-label="Remover prêmio"><Trash2 size={18} /></button>
               </div>
             ))}
           </div>

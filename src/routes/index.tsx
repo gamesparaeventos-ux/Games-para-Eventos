@@ -30,9 +30,9 @@ import AdminSupport from '../components/admin/AdminSupport';
 import AdminSettings from '../components/admin/AdminSettings';
 import AdminAudit from '../components/admin/AdminAudit';
 import AdminRisk from '../components/admin/AdminRisk';
-import AdminRefunds from '../components/admin/AdminRefunds'; // <-- NOVO
+import AdminRefunds from '../components/admin/AdminRefunds';
 
-// Dashboard Cliente e Players (Mantidos)
+// Dashboard Cliente e Players
 import { DashboardPage } from '../modules/dashboard/Dashboard';
 import { LeadsPage } from '../modules/dashboard/LeadsPage';
 import { CreditsPage } from '../modules/dashboard/CreditsPage';
@@ -55,6 +55,11 @@ import { BalloonPlayer } from '../modules/player/BalloonPlayer';
 
 const queryClient = new QueryClient();
 
+// Interface para evitar o uso de 'any' na configuração do evento
+interface EventConfig {
+  type?: string;
+}
+
 const AdminGuard = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
   if (loading) return <div className="flex h-screen w-full items-center justify-center bg-slate-950 text-white">Validando acesso...</div>;
@@ -66,17 +71,21 @@ const AdminGuard = ({ children }: { children: React.ReactNode }) => {
 function EditorDispatcher() {
   const { id } = useParams();
   const location = useLocation();
-  const [type, setType] = useState<string | null>(location.state?.type || null);
-  const [loading, setLoading] = useState(!location.state?.type);
+  const state = location.state as { type?: string } | null;
+  const [type, setType] = useState<string | null>(state?.type || null);
+  const [loading, setLoading] = useState(!state?.type);
+
   useEffect(() => {
     if (!type && id) {
       supabase.from('events').select('config').eq('id', id).single()
         .then(({ data }) => {
-          setType((data?.config as any)?.type || 'quiz');
+          const config = data?.config as EventConfig | null;
+          setType(config?.type || 'quiz');
           setLoading(false);
         });
     }
   }, [id, type]);
+
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-purple-600" /></div>;
   if (type === 'roulette' || type === 'gift') return <RouletteEditor />;
   if (type === 'memory' || type === 'ghost') return <MemoryEditor />;
@@ -88,15 +97,18 @@ function PlayerDispatcher() {
   const { id } = useParams();
   const [type, setType] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
   useEffect(() => {
     if (id) {
       supabase.from('events').select('config').eq('id', id).single()
         .then(({ data }) => {
-          setType((data?.config as any)?.type || 'quiz');
+          const config = data?.config as EventConfig | null;
+          setType(config?.type || 'quiz');
           setLoading(false);
         });
     }
   }, [id]);
+
   if (loading) return <div className="h-screen flex items-center justify-center bg-slate-900 text-white"><Loader2 className="animate-spin" /></div>;
   if (type === 'roulette' || type === 'gift') return <RoulettePlayer />;
   if (type === 'memory' || type === 'ghost') return <MemoryPlayer />;

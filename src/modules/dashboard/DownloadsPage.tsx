@@ -1,9 +1,34 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Download, Loader2, WifiOff, Calendar, Gamepad2, Package } from 'lucide-react';
+import { Download, Loader2, Gamepad2 } from 'lucide-react';
+
+interface GameConfig {
+  type?: string;
+  backgroundImageUrl?: string;
+  primaryColor?: string;
+  outerRimColor?: string;
+  ledColor?: string;
+  logoUrl?: string;
+  title?: string;
+  duration?: number;
+  difficulty?: string;
+  images?: string[];
+  items?: string[];
+  [key: string]: unknown;
+}
+
+interface Game {
+  id: string;
+  name: string;
+  type?: string;
+  status?: string;
+  user_id?: string;
+  created_at?: string;
+  config?: GameConfig;
+}
 
 export function DownloadsPage() {
-  const [games, setGames] = useState<any[]>([]);
+  const [games, setGames] = useState<Game[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -23,7 +48,7 @@ export function DownloadsPage() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setGames(data || []);
+      setGames((data as Game[]) || []);
     } catch (error) {
       console.error('Erro:', error);
     } finally {
@@ -31,7 +56,7 @@ export function DownloadsPage() {
     }
   };
 
-  const getGameTypeName = (game: any) => {
+  const getGameTypeName = (game: Game) => {
     const type = game.type || game.config?.type || 'roulette';
     switch (type.toLowerCase()) {
       case 'roulette': return 'ROLETA';
@@ -41,7 +66,7 @@ export function DownloadsPage() {
     }
   };
 
-  const generateOfflineHTML = (game: any) => {
+  const generateOfflineHTML = (game: Game) => {
     const config = game.config || {};
     const safeConfig = JSON.stringify(config);
     const bgUrl = config.backgroundImageUrl ? `url('${config.backgroundImageUrl}')` : 'none';
@@ -226,9 +251,9 @@ export function DownloadsPage() {
             if(flip.length === 2) {
               state.score++; 
               document.getElementById('s').innerText = state.score;
-              if(flip.id === flip.id) {
-                flip.el.classList.add('matched'); 
-                flip.el.classList.add('matched');
+              if(flip[0].id === flip[1].id) {
+                flip[0].el.classList.add('matched'); 
+                flip[1].el.classList.add('matched');
                 flip=[]; match++; 
                 if(match === deck.length/2) {
                   clearInterval(timerInterval);
@@ -308,7 +333,7 @@ export function DownloadsPage() {
 </html>`;
   };
 
-  const handleDownload = (game: any) => {
+  const handleDownload = (game: Game) => {
     const fileContent = generateOfflineHTML(game);
     const blob = new Blob([fileContent], {type: 'text/html'});
     const url = URL.createObjectURL(blob);

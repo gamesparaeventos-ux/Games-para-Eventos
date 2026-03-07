@@ -64,7 +64,7 @@ export function CustomizePage() {
       const { data } = supabase.storage.from('uploads').getPublicUrl(filePath);
 
       setBrand(prev => ({ ...prev, logoUrl: data.publicUrl }));
-    } catch (error) {
+    } catch {
       alert('Erro ao fazer upload da logo.');
     } finally {
       setUploading(false);

@@ -31,7 +31,7 @@ export function NewEventPage() {
     setStep(2);
   };
 
-  const createGame = async (type: string, defaultName: string) => {
+  const createGame = async (type: string) => {
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -118,7 +118,6 @@ export function NewEventPage() {
                 value={formData.name}
                 onChange={e => setFormData({...formData, name: e.target.value})}
                 placeholder="Ex: Feira de Tecnologia 2024"
-                // CORRIGIDO: Estilo claro
                 className="w-full px-4 py-3 rounded-xl border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all placeholder:text-slate-400"
               />
             </div>
@@ -132,7 +131,6 @@ export function NewEventPage() {
                   min={today}
                   value={formData.date}
                   onChange={e => setFormData({...formData, date: e.target.value})}
-                  // CORRIGIDO: Estilo claro
                   className="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all"
                 />
               </div>
@@ -150,7 +148,6 @@ export function NewEventPage() {
                   value={formData.location}
                   onChange={e => setFormData({...formData, location: e.target.value})}
                   placeholder="Ex: São Paulo, SP"
-                  // CORRIGIDO: Estilo claro
                   className="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all placeholder:text-slate-400"
                 />
               </div>
@@ -165,7 +162,6 @@ export function NewEventPage() {
                   onChange={e => setFormData({...formData, notes: e.target.value})}
                   placeholder="Informações adicionais sobre o evento..."
                   rows={4}
-                  // CORRIGIDO: Estilo claro
                   className="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all resize-none placeholder:text-slate-400"
                 />
               </div>
@@ -191,7 +187,7 @@ export function NewEventPage() {
           {gameTypes.map((game) => (
             <button
               key={game.id}
-              onClick={() => createGame(game.id, game.name)}
+              onClick={() => createGame(game.id)}
               className={`flex items-start gap-6 p-6 bg-white rounded-2xl border border-slate-200 text-left transition-all hover:shadow-lg hover:scale-[1.01] group ${game.border}`}
             >
               <div className={`w-16 h-16 rounded-xl flex items-center justify-center shrink-0 ${game.color} transition-transform group-hover:scale-110`}>

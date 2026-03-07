@@ -4,7 +4,7 @@ import { supabase } from "../../lib/supabase";
 import AdminLayout from "../../layouts/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
-import { ShieldAlert, AlertTriangle, Fingerprint, Lock, Unlock, Zap } from "lucide-react";
+import { ShieldAlert, AlertTriangle, Lock, Zap } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -99,8 +99,8 @@ export default function AdminRisk() {
                       <tr key={alert.id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="px-6 py-4">
                           <div className="flex flex-col">
-                            <span className="font-bold text-slate-900">{(alert.profiles as any)?.name || "N/A"}</span>
-                            <span className="text-xs text-slate-400">{(alert.profiles as any)?.email}</span>
+                            <span className="font-bold text-slate-900">{(alert.profiles as { name?: string; email?: string })?.name || "N/A"}</span>
+                            <span className="text-xs text-slate-400">{(alert.profiles as { name?: string; email?: string })?.email}</span>
                           </div>
                         </td>
                         <td className="px-6 py-4 font-medium text-slate-700">

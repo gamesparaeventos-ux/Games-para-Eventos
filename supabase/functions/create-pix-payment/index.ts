@@ -6,6 +6,12 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Interface para tipar a resposta do Mercado Pago e evitar 'any'
+interface MPPreferenceResponse {
+  init_point: string;
+  [key: string]: unknown;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -16,18 +22,16 @@ serve(async (req) => {
     );
 
     const authHeader = req.headers.get("Authorization");
-    console.log("Auth Header recebido:", authHeader ? "Sim" : "Não");
-
+    
     if (!authHeader) throw new Error("Token ausente no cabeçalho");
 
-    // Validação manual do usuário
+    // Validação do usuário
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(
       authHeader.replace("Bearer ", "")
     );
 
     if (authError || !user) {
-      console.error("Erro Auth:", authError);
-      return new Response(JSON.stringify({ error: "Sessão inválida", details: authError }), {
+      return new Response(JSON.stringify({ error: "Sessão inválida" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
@@ -54,15 +58,20 @@ serve(async (req) => {
       }),
     });
 
-    const mpData = await mpRes.json();
+    // Tipagem da resposta da API externa
+    const mpData = (await mpRes.json()) as MPPreferenceResponse;
+    
     return new Response(JSON.stringify({ init_point: mpData.init_point }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
-  } catch (err: any) {
-    console.error("Erro fatal na função:", err.message);
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }
+  } catch (err: unknown) {
+    // Tratamento seguro de erro sem 'any'
+    const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
+    console.error("Erro fatal na função:", errorMessage);
+    
+    return new Response(JSON.stringify({ error: errorMessage }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
   }
 });

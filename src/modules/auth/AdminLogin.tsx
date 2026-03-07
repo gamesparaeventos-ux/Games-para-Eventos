@@ -24,7 +24,7 @@ export const AdminLogin = () => {
       
       toast.success('Acesso Administrativo Liberado!');
       navigate('/admin/clients'); // Vai direto para o painel de admin
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
       toast.error('Credenciais inválidas ou sem permissão de acesso.');
     } finally {

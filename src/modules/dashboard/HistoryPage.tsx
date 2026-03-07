@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { 
-  History, UserPlus, Gamepad2, Clock, Filter
+  History, UserPlus, Gamepad2
 } from 'lucide-react';
 
 type Activity = {
@@ -11,8 +11,23 @@ type Activity = {
   subtitle: string;
   date: string;
   details?: string;
-  icon: any;
+  icon: React.ElementType;
 };
+
+interface EventData {
+  id: string;
+  name: string;
+  created_at: string;
+  type: string;
+}
+
+interface LeadData {
+  id: string;
+  name: string;
+  created_at: string;
+  event_id: string;
+  email: string;
+}
 
 export function HistoryPage() {
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -39,7 +54,7 @@ export function HistoryPage() {
 
       // 2. Busca Leads
       const eventIds = events?.map(e => e.id) || [];
-      let leads: any[] = [];
+      let leads: LeadData[] = [];
       
       if (eventIds.length > 0) {
         const { data: leadsData } = await supabase
@@ -48,11 +63,11 @@ export function HistoryPage() {
             .in('event_id', eventIds)
             .order('created_at', { ascending: false })
             .limit(50);
-        if (leadsData) leads = leadsData;
+        if (leadsData) leads = leadsData as LeadData[];
       }
 
       // 3. Normaliza dados
-      const eventActivities: Activity[] = (events || []).map(e => ({
+      const eventActivities: Activity[] = ((events as EventData[]) || []).map(e => ({
         id: e.id,
         type: 'event_creation',
         title: 'Novo Jogo Criado',

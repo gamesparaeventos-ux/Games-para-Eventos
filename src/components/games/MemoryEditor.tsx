@@ -3,9 +3,23 @@ import { GameBuilderLayout } from "../game-builder/GameBuilderLayout";
 import pptxgen from "pptxgenjs";
 import { Image, Plus, Trash2 } from "lucide-react";
 
+// Interfaces para eliminar a necessidade de @ts-ignore e tipar corretamente o estado
+interface MemoryPair {
+  id: number;
+  text: string;
+  image: string;
+}
+
+interface MemoryGameData {
+  title: string;
+  primaryColor: string;
+  cardBackImage: string;
+  pairs: MemoryPair[];
+}
+
 export function MemoryEditor() {
   // 1. FONTE ÚNICA DA VERDADE
-  const [gameData, setGameData] = useState({
+  const [gameData, setGameData] = useState<MemoryGameData>({
     title: "Memória Corporativa",
     primaryColor: "#0ea5e9", // Azul Céu
     cardBackImage: "https://placehold.co/100x100/2f3542/ffffff?text=?", // Verso da carta
@@ -38,7 +52,7 @@ export function MemoryEditor() {
       const col = index % 4;
       const row = Math.floor(index / 4);
       // Carta A (Texto)
-      slide2.addShape(pres.ShapeType.rect, { 
+       slide2.addShape(pres.ShapeType.rect, {
         x: 0.5 + (col * 2.2), y: 1 + (row * 2), w: 2, h: 1.5, 
         fill: { color: gameData.primaryColor } 
       });
@@ -55,7 +69,7 @@ export function MemoryEditor() {
   };
 
   const addPair = () => {
-    const newId = gameData.pairs.length + 1;
+    const newId = gameData.pairs.length > 0 ? Math.max(...gameData.pairs.map(p => p.id)) + 1 : 1;
     setGameData({
       ...gameData,
       pairs: [...gameData.pairs, { id: newId, text: `Item ${newId}`, image: "" }]
@@ -68,10 +82,14 @@ export function MemoryEditor() {
     setGameData({ ...gameData, pairs: newPairs });
   };
 
-  const updatePair = (index: number, field: string, value: string) => {
-    const newPairs = [...gameData.pairs];
-    // @ts-ignore
-    newPairs[index][field] = value;
+  // Correção: Tipagem de 'field' como chave de MemoryPair para evitar erro de indexação
+  const updatePair = (index: number, field: keyof MemoryPair, value: string) => {
+    const newPairs = gameData.pairs.map((pair, i) => {
+      if (i === index) {
+        return { ...pair, [field]: value };
+      }
+      return pair;
+    });
     setGameData({ ...gameData, pairs: newPairs });
   };
 

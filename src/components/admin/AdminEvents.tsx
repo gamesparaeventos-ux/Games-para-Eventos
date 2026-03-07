@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../lib/supabase"; // IMPORTAÇÃO CORRIGIDA
 import AdminLayout from "../../layouts/AdminLayout";
 import { Card, CardContent, CardHeader } from "../ui/card";
-import { Input } from "../ui/input";
 import { Badge } from "../ui/badge";
 import { Search, Calendar as CalendarIcon, User, Gamepad2, ExternalLink, Activity, Clock } from "lucide-react";
 import { format } from "date-fns";
@@ -64,7 +63,7 @@ export default function AdminEvents() {
     if (!events) return [];
     const searchLower = search.toLowerCase();
     return events.filter(event => {
-      const profile: any = Array.isArray(event.profiles) ? event.profiles : event.profiles;
+      const profile = (Array.isArray(event.profiles) ? event.profiles[0] : event.profiles) as { name?: string; email?: string } | null;
       return (
         event.name?.toLowerCase().includes(searchLower) ||
         profile?.name?.toLowerCase().includes(searchLower) ||
@@ -118,7 +117,7 @@ export default function AdminEvents() {
                     <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-400">Nenhum evento ativo no momento.</td></tr>
                   ) : (
                     filteredEvents.map((event) => {
-                      const profile: any = Array.isArray(event.profiles) ? event.profiles : event.profiles;
+                      const profile = (Array.isArray(event.profiles) ? event.profiles[0] : event.profiles) as { name?: string; email?: string } | null;
                       const isActive = event.status === 'active';
                       
                       return (
@@ -129,7 +128,7 @@ export default function AdminEvents() {
                               <div className="flex items-center gap-1.5 mt-1">
                                 <Gamepad2 size={12} className="text-purple-500" />
                                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                                  {(event.config as any)?.type || "Game"}
+                                  {(event.config as { type?: string })?.type || "Game"}
                                 </span>
                               </div>
                             </div>

@@ -1,12 +1,22 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { Loader2, Trophy, Ghost, Sparkles, Clock, AlertTriangle, RotateCcw, Play } from 'lucide-react';
+import { Loader2, Trophy, Ghost, Sparkles, Clock, RotateCcw, Play } from 'lucide-react';
 import { LeadGate } from './LeadGate';
+
+interface MemoryGameConfig {
+  title: string;
+  primaryColor: string;
+  skipLeadGate: boolean;
+  difficulty: 'easy' | 'medium' | 'hard';
+  images: string[];
+  logoUrl?: string;
+  backgroundImageUrl?: string;
+}
 
 interface Card {
   id: number;
-  pairId: number; // Índice da imagem original
+  pairId: number; 
   content: string; 
   isFlipped: boolean;
   isMatched: boolean;
@@ -15,43 +25,29 @@ interface Card {
 export function MemoryPlayer() {
   const { id } = useParams();
   const [loading, setLoading] = useState(true);
-  const [config, setConfig] = useState<any>(null);
+  const [config, setConfig] = useState<MemoryGameConfig | null>(null);
   
   const [gameState, setGameState] = useState<'gate' | 'intro' | 'playing' | 'result'>('gate');
   const [cards, setCards] = useState<Card[]>([]);
   const [flippedCards, setFlippedCards] = useState<number[]>([]);
   const [moves, setMoves] = useState(0);
-  const [startTime, setStartTime] = useState(0);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [isLocking, setIsLocking] = useState(false);
   const [blockReason, setBlockReason] = useState<string | null>(null);
 
-  const timerRef = useRef<any>(null);
+  const timerRef = useRef<number | null>(null);
+  const startTimeRef = useRef<number>(0);
 
-  useEffect(() => { loadGame(); }, [id]);
-
-  useEffect(() => {
-    if (gameState === 'playing') {
-      setStartTime(Date.now());
-      timerRef.current = setInterval(() => {
-        setElapsedTime(Math.floor((Date.now() - startTime) / 1000));
-      }, 1000);
-    } else {
-      clearInterval(timerRef.current);
-    }
-    return () => clearInterval(timerRef.current);
-  }, [gameState, startTime]);
-
-  const loadGame = async () => {
+  const loadGame = useCallback(async () => {
     if (!id) return;
     try {
-      const { data } = await supabase.from('events').select('*').eq('id', id).single();
-      if (!data) return;
+      const { data, error } = await supabase.from('events').select('*').eq('id', id).single();
+      if (error || !data) return;
 
       if (data.status !== 'active') setBlockReason('Jogo em rascunho.');
 
       const cfg = data.config || {};
-      setConfig({
+      const newConfig: MemoryGameConfig = {
         title: cfg.title || 'Memory Match',
         primaryColor: cfg.primaryColor || '#06b6d4',
         skipLeadGate: cfg.skipLeadGate || false,
@@ -59,22 +55,46 @@ export function MemoryPlayer() {
         images: cfg.images || [],
         logoUrl: cfg.logoUrl,
         backgroundImageUrl: cfg.backgroundImageUrl
-      });
+      };
+
+      setConfig(newConfig);
       
       if (data.status !== 'active') setGameState('gate');
-      else setGameState(cfg.skipLeadGate ? 'intro' : 'gate');
+      else setGameState(newConfig.skipLeadGate ? 'intro' : 'gate');
 
-    } catch (e) { console.error(e); } finally { setLoading(false); }
-  };
+    } catch (e) { 
+      console.error(e); 
+    } finally { 
+      setLoading(false); 
+    }
+  }, [id]);
+
+  useEffect(() => { 
+    loadGame(); 
+  }, [loadGame]);
+
+  useEffect(() => {
+    if (gameState === 'playing') {
+      startTimeRef.current = Date.now();
+      timerRef.current = window.setInterval(() => {
+        setElapsedTime(Math.floor((Date.now() - startTimeRef.current) / 1000));
+      }, 1000);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [gameState]);
 
   const startGame = () => {
-    // Preparar o Deck
+    if (!config) return;
+
     const images = config.images || [];
     let pairCount = 6;
     if (config.difficulty === 'medium') pairCount = 10;
     if (config.difficulty === 'hard') pairCount = 15;
 
-    // Se tiver menos imagens que o necessário, repete ou corta
     const selectedImages = images.slice(0, pairCount);
     
     const deck: Card[] = [];
@@ -83,7 +103,6 @@ export function MemoryPlayer() {
       deck.push({ id: 0, pairId: idx, content: img, isFlipped: false, isMatched: false });
     });
 
-    // Shuffle
     for (let i = deck.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [deck[i], deck[j]] = [deck[j], deck[i]];
@@ -95,28 +114,10 @@ export function MemoryPlayer() {
     setGameState('playing');
   };
 
-  const handleCardClick = (index: number) => {
-    if (gameState !== 'playing' || isLocking) return;
-    if (cards[index].isFlipped || cards[index].isMatched) return;
-
-    const newCards = [...cards];
-    newCards[index].isFlipped = true;
-    setCards(newCards);
-
-    const newFlipped = [...flippedCards, index];
-    setFlippedCards(newFlipped);
-
-    if (newFlipped.length === 2) {
-      setMoves(m => m + 1);
-      setIsLocking(true);
-      checkForMatch(newFlipped[0], newFlipped[1]);
-    }
-  };
-
-  const checkForMatch = (idx1: number, idx2: number) => {
-    const match = cards[idx1].pairId === cards[idx2].pairId;
+  const checkForMatch = (idx1: number, idx2: number, currentCards: Card[]) => {
+    const match = currentCards[idx1].pairId === currentCards[idx2].pairId;
     setTimeout(() => {
-      const newCards = [...cards];
+      const newCards = [...currentCards];
       if (match) {
         newCards[idx1].isMatched = true;
         newCards[idx2].isMatched = true;
@@ -135,22 +136,37 @@ export function MemoryPlayer() {
     }, 800);
   };
 
-  // Grid Responsivo Matemático
+  const handleCardClick = (index: number) => {
+    if (gameState !== 'playing' || isLocking) return;
+    if (cards[index].isFlipped || cards[index].isMatched) return;
+
+    const newCards = [...cards];
+    newCards[index].isFlipped = true;
+    setCards(newCards);
+
+    const newFlipped = [...flippedCards, index];
+    setFlippedCards(newFlipped);
+
+    if (newFlipped.length === 2) {
+      setMoves(m => m + 1);
+      setIsLocking(true);
+      checkForMatch(newFlipped[0], newFlipped[1], newCards);
+    }
+  };
+
   const getGridStyle = () => {
     const total = cards.length;
     let cols = 4;
-    
-    // Configurações baseadas em NÚMERO DE CARTAS e ORIENTAÇÃO
     const isPortrait = window.innerHeight > window.innerWidth;
 
     if (isPortrait) {
-      if (total <= 12) cols = 3; // Fácil Mobile
-      else if (total <= 20) cols = 4; // Médio Mobile
-      else cols = 5; // Difícil Mobile
+      if (total <= 12) cols = 3;
+      else if (total <= 20) cols = 4;
+      else cols = 5;
     } else {
-      if (total <= 12) cols = 4; // Fácil Desktop
-      else if (total <= 20) cols = 5; // Médio Desktop
-      else cols = 6; // Difícil Desktop
+      if (total <= 12) cols = 4;
+      else if (total <= 20) cols = 5;
+      else cols = 6;
     }
 
     return {
@@ -170,12 +186,10 @@ export function MemoryPlayer() {
         backgroundPosition: 'center'
       }}
     >
-      {/* Overlay */}
       <div className="absolute inset-0 bg-black/60 pointer-events-none z-0"></div>
 
-      {/* HEADER */}
       <div className="relative z-10 flex-none px-6 py-4 flex justify-between items-center bg-white/5 border-b border-white/10 backdrop-blur-md h-20">
-         {config?.logoUrl ? <img src={config.logoUrl} className="h-12 object-contain" /> : <div className="text-white font-bold">{config?.title}</div>}
+         {config?.logoUrl ? <img src={config.logoUrl} className="h-12 object-contain" alt="Logo do Evento" /> : <div className="text-white font-bold">{config?.title}</div>}
          
          <div className="flex gap-6">
             <div className="text-right">
@@ -192,16 +206,14 @@ export function MemoryPlayer() {
          </div>
       </div>
 
-      {/* ÁREA DE JOGO */}
       <main className="relative z-10 flex-1 p-4 flex items-center justify-center w-full h-full overflow-hidden">
-        
         {gameState === 'intro' && (
           <div className="text-center animate-bounce-in">
              <div className="w-24 h-24 bg-cyan-500/20 rounded-full flex items-center justify-center mx-auto mb-6 text-cyan-400 animate-pulse">
                <Ghost size={48} />
              </div>
              <h2 className="text-4xl font-black text-white mb-2">Jogo da Memória</h2>
-             <p className="text-slate-400 mb-8">Encontre todos os {config.difficulty === 'easy' ? 6 : config.difficulty === 'medium' ? 10 : 15} pares.</p>
+             <p className="text-slate-400 mb-8">Encontre todos os {config?.difficulty === 'easy' ? 6 : config?.difficulty === 'medium' ? 10 : 15} pares.</p>
              <button 
                onClick={startGame}
                className="bg-cyan-500 hover:bg-cyan-400 text-white px-12 py-4 rounded-xl font-black text-xl shadow-lg transition-all hover:scale-105"
@@ -216,8 +228,8 @@ export function MemoryPlayer() {
             className="grid gap-3 w-full max-w-6xl transition-all"
             style={{ 
               ...getGridStyle(),
-              height: 'min(100%, 80vh)', // Trava altura
-              aspectRatio: config.difficulty === 'hard' ? 'auto' : '4/3' 
+              height: 'min(100%, 80vh)',
+              aspectRatio: config?.difficulty === 'hard' ? 'auto' : '4/3' 
             }}
           >
             {cards.map((card, idx) => (
@@ -227,22 +239,18 @@ export function MemoryPlayer() {
                 className="relative cursor-pointer group perspective-1000"
               >
                 <div className={`w-full h-full transition-transform duration-500 transform-style-3d shadow-lg rounded-xl ${card.isFlipped || card.isMatched ? 'rotate-y-180' : 'hover:scale-[1.02]'}`}>
-                  
-                  {/* Frente (Capa) */}
                   <div className="absolute inset-0 bg-gradient-to-br from-slate-800 to-slate-900 border-2 border-white/10 rounded-xl flex items-center justify-center backface-hidden shadow-inner">
-                     <Ghost className="text-slate-700 w-1/3 h-1/3" />
+                      <Ghost className="text-slate-700 w-1/3 h-1/3" />
                   </div>
 
-                  {/* Verso (Imagem) */}
                   <div className={`absolute inset-0 bg-white rounded-xl flex items-center justify-center backface-hidden rotate-y-180 overflow-hidden border-2 ${card.isMatched ? 'border-green-500 shadow-[0_0_15px_rgba(34,197,94,0.5)]' : 'border-white'}`}>
-                    <img src={card.content} className="w-full h-full object-cover" />
+                    <img src={card.content} className="w-full h-full object-cover" alt={`Carta ${idx}`} />
                     {card.isMatched && (
-                      <div className="absolute inset-0 bg-green-500/20 flex items-center justify-center animate-ping-slow">
-                        <Sparkles className="text-white drop-shadow-md w-1/2 h-1/2" />
+                      <div className="absolute inset-0 bg-green-500/20 flex items-center justify-center">
+                        <Sparkles className="text-white drop-shadow-md w-1/2 h-1/2 animate-pulse" />
                       </div>
                     )}
                   </div>
-
                 </div>
               </div>
             ))}
@@ -250,7 +258,6 @@ export function MemoryPlayer() {
         )}
       </main>
 
-      {/* RESULTADO */}
       {gameState === 'result' && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md animate-fade-in p-6">
            <div className="bg-white p-10 rounded-[2rem] text-center max-w-sm w-full shadow-2xl animate-bounce-in">

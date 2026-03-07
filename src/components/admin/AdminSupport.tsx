@@ -1,16 +1,14 @@
-import React, { useState } from "react";
+import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../../lib/supabase";
 import AdminLayout from "../../layouts/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
-import { MessageSquare, User, Clock, CheckCircle2, AlertCircle, Search } from "lucide-react";
+import { CheckCircle2, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 export default function AdminSupport() {
-  const [search, setSearch] = useState("");
-
   const { data: tickets, isLoading } = useQuery({
     queryKey: ["admin-support-tickets"],
     queryFn: async () => {
@@ -62,43 +60,47 @@ export default function AdminSupport() {
                   {isLoading ? (
                     <tr><td colSpan={5} className="px-6 py-10 text-center">Buscando chamados...</td></tr>
                   ) : (
-                    tickets?.map((ticket) => (
-                      <tr key={ticket.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-6 py-4">
-                          <div className="flex flex-col">
-                            <span className="font-bold text-slate-900">{ticket.subject}</span>
-                            <span className="text-xs text-slate-500">{(ticket.profiles as any)?.email}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <Badge variant="outline" className={
-                            ticket.priority === 'high' ? "border-red-200 text-red-600 bg-red-50" : "border-slate-200 text-slate-600"
-                          }>
-                            {ticket.priority === 'high' ? 'Alta' : 'Normal'}
-                          </Badge>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-1.5">
-                            {ticket.status === 'open' ? (
-                              <AlertCircle size={14} className="text-amber-500" />
-                            ) : (
-                              <CheckCircle2 size={14} className="text-emerald-500" />
-                            )}
-                            <span className={`font-medium ${ticket.status === 'open' ? 'text-amber-600' : 'text-emerald-600'}`}>
-                              {ticket.status === 'open' ? 'Aberto' : 'Resolvido'}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-slate-500">
-                           {format(new Date(ticket.created_at), "dd/MM/yy", { locale: ptBR })}
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <button className="text-xs font-bold text-purple-600 hover:bg-purple-50 px-3 py-1.5 rounded-lg border border-purple-100 transition-all">
-                            Responder
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                    tickets?.map((ticket) => {
+                      const profile = (Array.isArray(ticket.profiles) ? ticket.profiles[0] : ticket.profiles) as { name?: string; email?: string } | null;
+                      
+                      return (
+                        <tr key={ticket.id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col">
+                              <span className="font-bold text-slate-900">{ticket.subject}</span>
+                              <span className="text-xs text-slate-500">{profile?.email}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <Badge variant="outline" className={
+                              ticket.priority === 'high' ? "border-red-200 text-red-600 bg-red-50" : "border-slate-200 text-slate-600"
+                            }>
+                              {ticket.priority === 'high' ? 'Alta' : 'Normal'}
+                            </Badge>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-1.5">
+                              {ticket.status === 'open' ? (
+                                <AlertCircle size={14} className="text-amber-500" />
+                              ) : (
+                                <CheckCircle2 size={14} className="text-emerald-500" />
+                              )}
+                              <span className={`font-medium ${ticket.status === 'open' ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                {ticket.status === 'open' ? 'Aberto' : 'Resolvido'}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-slate-500">
+                             {format(new Date(ticket.created_at), "dd/MM/yy", { locale: ptBR })}
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <button className="text-xs font-bold text-purple-600 hover:bg-purple-50 px-3 py-1.5 rounded-lg border border-purple-100 transition-all">
+                              Responder
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>

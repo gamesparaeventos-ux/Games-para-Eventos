@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../../lib/supabase";
 import AdminLayout from "../../layouts/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
-import { ClipboardList, User, Clock, ShieldCheck, Info } from "lucide-react";
+import { ClipboardList, Clock, Info } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -62,8 +62,8 @@ export default function AdminAudit() {
                       <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="px-6 py-4">
                           <div className="flex flex-col">
-                            <span className="font-bold text-slate-900">{(log.profiles as any)?.name || "Sistema"}</span>
-                            <span className="text-xs text-slate-400">{(log.profiles as any)?.email}</span>
+                            <span className="font-bold text-slate-900">{(log.profiles as { name?: string; email?: string })?.name || "Sistema"}</span>
+                            <span className="text-xs text-slate-400">{(log.profiles as { name?: string; email?: string })?.email}</span>
                           </div>
                         </td>
                         <td className="px-6 py-4">

@@ -1,5 +1,18 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { ArrowLeft, Trophy, RotateCcw } from "lucide-react";
+
+interface BalloonColor {
+  hex: string;
+  name: string;
+}
+
+interface Balloon {
+  id: number;
+  x: number;
+  y: number;
+  color: BalloonColor;
+  speed: number;
+}
 
 interface BalloonGameProps {
   duration?: number;
@@ -11,7 +24,7 @@ interface BalloonGameProps {
   onExit?: () => void;
 }
 
-const DEFAULT_COLORS = [
+const DEFAULT_COLORS: BalloonColor[] = [
   { hex: "#EF4444", name: "VERMELHO" },
   { hex: "#3B82F6", name: "AZUL" },
   { hex: "#22C55E", name: "VERDE" },
@@ -19,32 +32,62 @@ const DEFAULT_COLORS = [
   { hex: "#EC4899", name: "ROSA" },
 ];
 
-const BalloonGame = ({ duration = 30, speed = 2, colors, logoUrl, backgroundUrl, onFinish, onExit }: BalloonGameProps) => {
+const BalloonGame = ({ 
+  duration = 30, 
+  speed = 2, 
+  colors, 
+  logoUrl, 
+  backgroundUrl, 
+  onFinish, 
+  onExit 
+}: BalloonGameProps) => {
   const [score, setScore] = useState(0);
   const [timeLeft, setTimeLeft] = useState(duration);
-  const [gameState, setGameState] = useState<"playing"|"result">("playing");
-  const [balloons, setBalloons] = useState<any[]>([]);
-  const [targetColor, setTargetColor] = useState(DEFAULT_COLORS[0]);
+  const [gameState, setGameState] = useState<"playing" | "result">("playing");
+  const [balloons, setBalloons] = useState<Balloon[]>([]);
   
-  const activeColors = colors && colors.length ? DEFAULT_COLORS.filter(c => colors.includes(c.hex)) : DEFAULT_COLORS;
+  // Memorizando cores para evitar disparos desnecessários no useEffect
+  const activeColors = useMemo(() => {
+    return colors && colors.length 
+      ? DEFAULT_COLORS.filter(c => colors.includes(c.hex)) 
+      : DEFAULT_COLORS;
+  }, [colors]);
+
+  const [targetColor, setTargetColor] = useState(activeColors[0]);
   
-  // CORREÇÃO: Inicializando com 0 para evitar o erro "1 argumentos esperados"
   const requestRef = useRef<number>(0);
   const lastSpawn = useRef<number>(0);
   const lastTargetChange = useRef<number>(0);
 
+  // Efeito para o Cronômetro
   useEffect(() => {
+    if (gameState !== "playing") return;
+
     const timer = setInterval(() => {
       setTimeLeft(t => {
-        if (t <= 1) { clearInterval(timer); setGameState("result"); onFinish?.(score); return 0; }
+        if (t <= 1) {
+          clearInterval(timer);
+          setGameState("result");
+          return 0;
+        }
         return t - 1;
       });
     }, 1000);
-    return () => clearInterval(timer);
-  }, []);
 
+    return () => clearInterval(timer);
+  }, [gameState]);
+
+  // Efeito para disparar onFinish apenas quando o jogo acabar
+  useEffect(() => {
+    if (gameState === "result") {
+      onFinish?.(score);
+    }
+  }, [gameState, score, onFinish]);
+
+  // Efeito para Animação e Lógica de Jogo
   useEffect(() => {
     if (gameState !== 'playing') return;
+
     const animate = (time: number) => {
       // Spawn Logic
       if (time - lastSpawn.current > (1500 / speed)) {
@@ -69,9 +112,10 @@ const BalloonGame = ({ duration = 30, speed = 2, colors, logoUrl, backgroundUrl,
       
       requestRef.current = requestAnimationFrame(animate);
     };
+
     requestRef.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(requestRef.current);
-  }, [gameState, speed]);
+  }, [gameState, speed, activeColors]);
 
   const pop = (id: number, colorHex: string) => {
     setBalloons(prev => prev.filter(b => b.id !== id));
@@ -92,10 +136,20 @@ const BalloonGame = ({ duration = 30, speed = 2, colors, logoUrl, backgroundUrl,
           <h2 className="text-3xl font-black text-slate-800">Fim de Jogo!</h2>
           <p className="text-6xl font-black text-purple-600 my-6">{score}</p>
           <div className="flex gap-2">
-            <button onClick={() => window.location.reload()} className="flex-1 py-3 bg-purple-600 text-white font-bold rounded-xl flex items-center justify-center gap-2">
+            <button 
+              onClick={() => window.location.reload()} 
+              className="flex-1 py-3 bg-purple-600 text-white font-bold rounded-xl flex items-center justify-center gap-2"
+            >
               <RotateCcw size={18}/> Jogar Novamente
             </button>
-            {onExit && <button onClick={onExit} className="px-4 py-3 bg-slate-200 text-slate-700 font-bold rounded-xl">Sair</button>}
+            {onExit && (
+              <button 
+                onClick={onExit} 
+                className="px-4 py-3 bg-slate-200 text-slate-700 font-bold rounded-xl"
+              >
+                Sair
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -103,14 +157,27 @@ const BalloonGame = ({ duration = 30, speed = 2, colors, logoUrl, backgroundUrl,
   }
 
   return (
-    <div className="h-full w-full relative overflow-hidden bg-gradient-to-b from-indigo-500 to-purple-600 font-sans" style={backgroundUrl ? { backgroundImage: `url(${backgroundUrl})`, backgroundSize: 'cover' } : {}}>
+    <div 
+      className="h-full w-full relative overflow-hidden bg-gradient-to-b from-indigo-500 to-purple-600 font-sans" 
+      style={backgroundUrl ? { backgroundImage: `url(${backgroundUrl})`, backgroundSize: 'cover' } : {}}
+    >
       <div className="absolute top-0 w-full p-4 flex justify-between items-start z-50 pointer-events-none">
-        {onExit && <button onClick={onExit} className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center text-white pointer-events-auto backdrop-blur-sm"><ArrowLeft/></button>}
+        {onExit && (
+          <button 
+            onClick={onExit} 
+            className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center text-white pointer-events-auto backdrop-blur-sm"
+          >
+            <ArrowLeft/>
+          </button>
+        )}
         
         <div className="flex flex-col items-center bg-black/30 px-6 py-2 rounded-full border border-white/20 backdrop-blur-md animate-pulse">
           <span className="text-[10px] text-white/80 font-bold uppercase tracking-wider mb-1">Toque no:</span>
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full border-2 border-white shadow-[0_0_10px_white]" style={{backgroundColor: targetColor.hex}}></div>
+            <div 
+              className="w-4 h-4 rounded-full border-2 border-white shadow-[0_0_10px_white]" 
+              style={{backgroundColor: targetColor.hex}}
+            ></div>
             <span className="text-xl font-black text-white">{targetColor.name}</span>
           </div>
         </div>
@@ -145,4 +212,5 @@ const BalloonGame = ({ duration = 30, speed = 2, colors, logoUrl, backgroundUrl,
     </div>
   );
 };
+
 export default BalloonGame;

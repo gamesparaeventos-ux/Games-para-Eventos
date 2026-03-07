@@ -58,7 +58,7 @@ export default function AdminPayments() {
     if (!payments) return [];
     return payments.filter(pay => {
       // O Supabase retorna como objeto único quando a FK está correta
-      const profile: any = pay.profiles;
+      const profile = (Array.isArray(pay.profiles) ? pay.profiles[0] : pay.profiles) as { name?: string; email?: string } | null;
       const searchLower = search.toLowerCase();
       
       return (
@@ -130,7 +130,7 @@ export default function AdminPayments() {
                     <tr><td colSpan={4} className="px-6 py-24 text-center text-slate-400">Nenhum pagamento encontrado.</td></tr>
                   ) : (
                     filteredPayments.map((pay) => {
-                      const profile: any = pay.profiles;
+                      const profile = (Array.isArray(pay.profiles) ? pay.profiles[0] : pay.profiles) as { name?: string; email?: string } | null;
                       return (
                         <tr key={pay.id} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-6 py-4">

@@ -26,7 +26,7 @@ export default function AdminReports() {
       const { data: games } = await supabase.from("games").select("id, title");
       const { data: activations } = await supabase.from("event_games").select("game_id");
       
-      let popularity: any[] = [];
+      let popularity: { name: string; value: number; color: string }[] = [];
       if (games && activations && activations.length > 0) {
         const counts: Record<string, number> = {};
         activations.forEach(a => { counts[a.game_id] = (counts[a.game_id] || 0) + 1; });

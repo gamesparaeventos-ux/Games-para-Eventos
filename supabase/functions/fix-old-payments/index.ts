@@ -1,24 +1,31 @@
-// @ts-ignore
+// @ts-expect-error: Deno std library import
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-// @ts-ignore
+// @ts-expect-error: Supabase JS import via esm.sh
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-// @ts-ignore
-serve(async (req: any) => {
+interface MPResponse {
+  results?: Array<{
+    id: number;
+    status: string;
+  }>;
+}
+
+// @ts-expect-error: Serve definition for Deno
+serve(async () => {
   try {
-    // @ts-ignore
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    // @ts-ignore
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    const MP_ACCESS_TOKEN = Deno.env.get("MP_ACCESS_TOKEN") ?? "";
+
     const supabase = createClient(supabaseUrl, supabaseKey);
-    // @ts-ignore
-    const MP_ACCESS_TOKEN = Deno.env.get("MP_ACCESS_TOKEN");
 
     // 1. Busca todas as transações pendentes
-    const { data: pendentes } = await supabase
+    const { data: pendentes, error: fetchError } = await supabase
       .from("transactions")
       .select("*")
       .eq("status", "pending");
+
+    if (fetchError) throw fetchError;
 
     if (!pendentes || pendentes.length === 0) {
       return new Response("Nenhuma transação pendente encontrada.");
@@ -26,43 +33,39 @@ serve(async (req: any) => {
 
     let corrigidos = 0;
 
-    // 2. Para cada pendente, pergunta pro Mercado Pago
+    // 2. Para cada pendente, consulta o Mercado Pago
     for (const trx of pendentes) {
-      // Se não tiver ID da transação, pula
       if (!trx.id) continue;
 
-      // Busca pagamentos que tenham esse external_reference (ID da nossa transaction)
       const mpRes = await fetch(
         `https://api.mercadopago.com/v1/payments/search?external_reference=${trx.id}`,
         { headers: { Authorization: `Bearer ${MP_ACCESS_TOKEN}` } }
       );
 
-      const mpData = await mpRes.json();
-      // Pega o primeiro pagamento encontrado (se houver)
+      const mpData = (await mpRes.json()) as MPResponse;
       const payment = mpData.results?.[0];
 
       if (payment && payment.status === "approved") {
-        console.log(`Corrigindo transação ${trx.id}...`);
-        
-        // Atualiza status
+        // Atualiza o status na tabela de transações
         await supabase
           .from("transactions")
           .update({ status: "approved", payment_id: String(payment.id) })
           .eq("id", trx.id);
 
-        // Dá o crédito
-        await supabase.rpc("increment_credits", { 
-            user_id_param: trx.user_id, 
-            amount_param: 1 
+        // Incrementa os créditos via RPC
+        await supabase.rpc("increment_credits", {
+            user_id_param: trx.user_id,
+            amount_param: 1
         });
-        
+
         corrigidos++;
       }
     }
 
     return new Response(`Processo finalizado. ${corrigidos} pagamentos corrigidos.`);
 
-  } catch (err: any) {
-    return new Response("Erro: " + err.message, { status: 500 });
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
+    return new Response("Erro: " + errorMessage, { status: 500 });
   }
 });

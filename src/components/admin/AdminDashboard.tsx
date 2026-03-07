@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../lib/supabase";
 import AdminLayout from "../../layouts/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
-import { Users, Calendar, DollarSign, Activity, ArrowUpRight, UserCheck, Smartphone } from "lucide-react";
+import { Users, DollarSign, Activity, ArrowUpRight, UserCheck, Smartphone } from "lucide-react";
 
 export default function AdminDashboard() {
   const queryClient = useQueryClient();
@@ -18,7 +18,7 @@ export default function AdminDashboard() {
     },
   });
 
-  const { data: eventsCount, isLoading: loadingEvents } = useQuery({
+  const { data: eventsCount } = useQuery({
     queryKey: ["admin-total-events"],
     queryFn: async () => {
       const { count, error } = await supabase.from("events").select("*", { count: "exact", head: true });

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { Trophy, RotateCcw, Home, CheckCircle, XCircle } from "lucide-react";
+import { Trophy, CheckCircle, XCircle } from "lucide-react";
 
 interface Question {
   question: string;
@@ -31,6 +31,7 @@ const QuizGame = ({ questions = defaultQuestions, logoUrl, backgroundUrl, onFini
       
       const shuffled = [...uniqueOptions];
       for (let i = shuffled.length - 1; i > 0; i--) {
+        // eslint-disable-next-line react-hooks/purity
         const j = Math.floor(Math.random() * (i + 1));
         [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
       }
@@ -52,18 +53,7 @@ const QuizGame = ({ questions = defaultQuestions, logoUrl, backgroundUrl, onFini
   const [gamePhase, setGamePhase] = useState<"playing" | "finished">("playing");
   const [timeLeft, setTimeLeft] = useState(15);
 
-  useEffect(() => {
-    if (gamePhase !== "playing" || selectedIdx !== null) return;
-    const timer = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) { handleSelectAnswer(-1); return 15; }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [gamePhase, currentIdx, selectedIdx]);
-
-  const handleSelectAnswer = (index: number) => {
+  const handleSelectAnswer = useCallback((index: number) => {
     if (selectedIdx !== null) return;
     setSelectedIdx(index);
     
@@ -83,7 +73,18 @@ const QuizGame = ({ questions = defaultQuestions, logoUrl, backgroundUrl, onFini
         setTimeLeft(15);
       }
     }, 1500);
-  };
+  }, [selectedIdx, currentIdx, processedQuestions, score, onFinish]);
+
+  useEffect(() => {
+    if (gamePhase !== "playing" || selectedIdx !== null) return;
+    const timer = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev <= 1) { handleSelectAnswer(-1); return 15; }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [gamePhase, selectedIdx, handleSelectAnswer]);
 
   const currentQ = processedQuestions[currentIdx];
 
@@ -106,7 +107,7 @@ const QuizGame = ({ questions = defaultQuestions, logoUrl, backgroundUrl, onFini
   return (
     <div className="min-h-screen flex flex-col p-4 md:p-6 bg-purple-600 font-sans" style={backgroundUrl ? { backgroundImage: `url(${backgroundUrl})`, backgroundSize: 'cover' } : {}}>
       <div className="flex justify-between items-center mb-6 text-white">
-        {logoUrl && <img src={logoUrl} className="h-10 object-contain" />}
+        {logoUrl && <img src={logoUrl} className="h-10 object-contain" alt="Logo" />}
         <div className="bg-white/20 px-4 py-2 rounded-xl font-bold text-sm">Pergunta {currentIdx + 1}/{processedQuestions.length}</div>
         <div className={`w-12 h-12 rounded-full flex items-center justify-center font-black text-lg ${timeLeft <= 5 ? 'bg-red-500 animate-pulse' : 'bg-white/20'}`}>{timeLeft}</div>
       </div>

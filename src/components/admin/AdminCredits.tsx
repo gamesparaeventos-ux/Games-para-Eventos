@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../../lib/supabase";
 import AdminLayout from "../../layouts/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
-import { Coins, ArrowUpRight, History, User } from "lucide-react";
+import { Coins, History, User } from "lucide-react";
 
 export default function AdminCredits() {
   const { data: creditsData, isLoading } = useQuery({

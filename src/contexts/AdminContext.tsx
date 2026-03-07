@@ -25,7 +25,13 @@ interface AdminContextType {
   startImpersonate: (targetUserId: string, targetUserEmail: string) => Promise<void>;
   stopImpersonate: () => Promise<void>;
   effectiveUserId: string | null;
-  logAdminAction: (action: string, entityType: string, entityId?: string, beforeJson?: Record<string, any>, afterJson?: Record<string, any>) => Promise<void>;
+  logAdminAction: (
+    action: string, 
+    entityType: string, 
+    entityId?: string, 
+    beforeJson?: Record<string, unknown>, 
+    afterJson?: Record<string, unknown>
+  ) => Promise<void>;
 }
 
 const AdminContext = createContext<AdminContextType | undefined>(undefined);
@@ -145,7 +151,7 @@ export const AdminProvider = ({ children }: { children: ReactNode }) => {
       setImpersonate(newState);
       localStorage.setItem(IMPERSONATE_KEY, JSON.stringify(newState));
       toast.success(`Visualizando como: ${targetUserEmail}`);
-    } catch (error) {
+    } catch {
       toast.error("Falha ao iniciar impersonate.");
     }
   }, [user, isAdmin]);
@@ -160,8 +166,8 @@ export const AdminProvider = ({ children }: { children: ReactNode }) => {
     action: string,
     entityType: string,
     entityId?: string,
-    beforeJson?: Record<string, any>,
-    afterJson?: Record<string, any>
+    beforeJson?: Record<string, unknown>,
+    afterJson?: Record<string, unknown>
   ) => {
     if (!user?.id) return;
     try {
@@ -196,8 +202,9 @@ export const AdminProvider = ({ children }: { children: ReactNode }) => {
   return <AdminContext.Provider value={value}>{children}</AdminContext.Provider>;
 };
 
-export const useAdmin = () => {
+// eslint-disable-next-line react-refresh/only-export-components
+export function useAdmin() {
   const context = useContext(AdminContext);
   if (context === undefined) throw new Error("useAdmin deve ser usado dentro de um AdminProvider");
   return context;
-};
+}

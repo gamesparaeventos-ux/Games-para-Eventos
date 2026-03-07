@@ -21,9 +21,11 @@ interface Props {
 }
 
 export function QuizEngine({ config, mode = "live" }: Props) {
+  // CORREÇÃO: Removido Math.random() que é uma função impura.
+  // Usamos o tamanho das perguntas como chave para resetar o preview se o config mudar.
   const stableKey = useMemo(() => {
-    return mode === "preview" ? Math.random() : 0;
-  }, [config, mode]);
+    return mode === "preview" ? `preview-${config.questions.length}` : "live";
+  }, [mode, config.questions.length]);
 
   return <QuizCore key={stableKey} config={config} mode={mode} />;
 }
@@ -40,7 +42,7 @@ function QuizCore({ config, mode }: Props) {
 
   const nextQuestion = useCallback(() => {
     if (currentQuestion + 1 < config.questions.length) {
-      setCurrentQuestion(c => c + 1);
+      setCurrentQuestion((c) => c + 1);
       setSelectedOption(null);
       setIsAnswered(false);
       setTimeLeft(15);
@@ -49,44 +51,37 @@ function QuizCore({ config, mode }: Props) {
     }
   }, [config.questions.length, currentQuestion]);
 
-  // Efeito do Cronômetro
-  useEffect(() => {
-    if (mode === "preview" || gameState !== "playing" || isAnswered || timeLeft <= 0) return;
-
-    const timer = setTimeout(() => setTimeLeft(t => t - 1), 1000);
-    return () => clearTimeout(timer);
-  }, [timeLeft, isAnswered, gameState, mode]);
-
-  // Efeito de Fim de Tempo (Timeout)
-  useEffect(() => {
-    if (timeLeft === 0 && !isAnswered && gameState === "playing" && mode === "live") {
-      // O "pulo do gato": usar um timeout de 0ms para tirar a atualização 
-      // do ciclo de renderização atual e silenciar o erro do compilador.
-      const timerId = setTimeout(() => {
-        setIsAnswered(true);
-        setTimeout(nextQuestion, 1200);
-      }, 0);
-      
-      return () => clearTimeout(timerId);
-    }
-  }, [timeLeft, isAnswered, gameState, mode, nextQuestion]);
-
-  const handleOptionClick = (index: number) => {
+  // Função centralizada para lidar com a resposta
+  const handleAnswer = useCallback((index: number | null) => {
     if (isAnswered) return;
 
     setSelectedOption(index);
     setIsAnswered(true);
 
-    const isCorrect = index === config.questions[currentQuestion]?.correctIndex;
+    const isCorrect = index !== null && index === config.questions[currentQuestion]?.correctIndex;
 
     if (isCorrect) {
-      setScore(s => s + 100 + timeLeft * 10);
+      setScore((s) => s + 100 + timeLeft * 10);
     }
 
-    setTimeout(() => {
-      nextQuestion();
-    }, 1200);
-  };
+    setTimeout(nextQuestion, 1200);
+  }, [isAnswered, config.questions, currentQuestion, timeLeft, nextQuestion]);
+
+  // Efeito do Cronômetro - CORRIGIDO para evitar cascading renders
+  useEffect(() => {
+    if (mode === "preview" || gameState !== "playing" || isAnswered) return;
+
+    if (timeLeft <= 0) {
+      // O SEGREDO: setTimeout 0 tira a execução do ciclo de render atual
+      const timeoutId = setTimeout(() => {
+        handleAnswer(null);
+      }, 0);
+      return () => clearTimeout(timeoutId);
+    }
+
+    const timer = setTimeout(() => setTimeLeft((t) => t - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [timeLeft, isAnswered, gameState, mode, handleAnswer]);
 
   const restartGame = () => {
     setCurrentQuestion(0);
@@ -99,17 +94,14 @@ function QuizCore({ config, mode }: Props) {
 
   if (!config.questions || config.questions.length === 0) {
     return (
-      <div className="w-full h-full flex items-center justify-center bg-black text-white">
-        Adicione perguntas para visualizar.
+      <div className="w-full h-full flex items-center justify-center bg-black text-white p-6 text-center">
+        Adicione perguntas no editor para visualizar.
       </div>
     );
   }
 
   const question = config.questions[currentQuestion];
-  const progress =
-    ((currentQuestion + (gameState === "result" ? 1 : 0)) /
-      config.questions.length) *
-    100;
+  const progress = ((currentQuestion + (gameState === "result" ? 1 : 0)) / config.questions.length) * 100;
 
   if (gameState === "result") {
     return (
@@ -117,7 +109,6 @@ function QuizCore({ config, mode }: Props) {
         <Trophy size={60} className="text-yellow-400 mb-6" />
         <h1 className="text-3xl font-bold mb-4">Fim de Jogo</h1>
         <div className="text-5xl font-black mb-8">{score}</div>
-
         <button
           onClick={restartGame}
           className="flex items-center gap-2 px-6 py-3 bg-white text-black rounded-xl font-bold hover:scale-105 transition"
@@ -133,15 +124,13 @@ function QuizCore({ config, mode }: Props) {
       className="w-full h-full flex flex-col overflow-hidden"
       style={{
         backgroundColor: primary,
-        backgroundImage: config.backgroundImageUrl
-          ? `url(${config.backgroundImageUrl})`
-          : undefined,
+        backgroundImage: config.backgroundImageUrl ? `url(${config.backgroundImageUrl})` : undefined,
         backgroundSize: "cover",
         backgroundPosition: "center"
       }}
     >
-      <div className="p-4 flex justify-between text-white font-bold">
-        <div>{score}</div>
+      <div className="p-4 flex justify-between text-white font-bold drop-shadow-md">
+        <div>{score} pts</div>
         {mode === "live" && (
           <div className="flex items-center gap-2">
             <Timer size={18} /> {timeLeft}s
@@ -157,30 +146,24 @@ function QuizCore({ config, mode }: Props) {
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center p-6">
-        <div className="bg-white rounded-2xl p-6 w-full mb-6 text-center">
-          <h2 className="text-xl font-bold text-black">
-            {question.question}
-          </h2>
+        <div className="bg-white rounded-2xl p-6 w-full mb-6 text-center shadow-xl">
+          <h2 className="text-xl font-bold text-black">{question.question}</h2>
         </div>
 
         <div className="grid gap-3 w-full">
           {question.options.map((opt, idx) => {
-            let btnClass = "bg-white text-black";
-
+            let btnClass = "bg-white text-black hover:bg-slate-50";
             if (isAnswered) {
-              if (idx === question.correctIndex)
-                btnClass = "bg-green-500 text-white";
-              else if (idx === selectedOption)
-                btnClass = "bg-red-500 text-white opacity-70";
+              if (idx === question.correctIndex) btnClass = "bg-green-500 text-white";
+              else if (idx === selectedOption) btnClass = "bg-red-500 text-white opacity-70";
               else btnClass = "bg-white opacity-40";
             }
-
             return (
               <button
                 key={idx}
                 disabled={isAnswered}
-                onClick={() => handleOptionClick(idx)}
-                className={`w-full py-3 px-4 rounded-xl font-bold transition ${btnClass}`}
+                onClick={() => handleAnswer(idx)}
+                className={`w-full py-4 px-4 rounded-xl font-bold transition shadow-md active:scale-95 ${btnClass}`}
               >
                 {opt}
               </button>
@@ -189,10 +172,7 @@ function QuizCore({ config, mode }: Props) {
         </div>
 
         {mode === "preview" && (
-          <button
-            onClick={restartGame}
-            className="mt-6 text-white underline text-sm"
-          >
+          <button onClick={restartGame} className="mt-8 text-white underline text-sm opacity-70 hover:opacity-100">
             Reiniciar Preview
           </button>
         )}

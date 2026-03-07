@@ -4,14 +4,14 @@ export interface Game {
   name: string;
   slug: string; // 'quiz', 'roleta', etc.
   description?: string;
-  image_url?: string; // Adicionado para evitar erro se estiver faltando
+  image_url?: string;
 }
 
 // Tabela 'events' (O Evento Pai)
 export interface EventoBase {
   id: string;
   name: string;
-  active?: boolean; // '?' significa opcional
+  active?: boolean;
 }
 
 // Tabela 'event_games' (A principal que liga tudo)
@@ -20,8 +20,8 @@ export interface EventGame {
   event_id: string;
   game_id: string;
   status: 'active' | 'inactive' | 'draft';
-  config: any;        // Aceita qualquer JSON
-  customization: any; // Aceita qualquer JSON
+  config: Record<string, unknown>;
+  customization: Record<string, unknown>;
   created_at: string;
   
   // Relacionamentos (Joins)

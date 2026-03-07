@@ -7,7 +7,6 @@ export function AccountPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   
-  // Estado do Usuário
   const [profile, setProfile] = useState({
     id: '',
     email: '',
@@ -17,7 +16,6 @@ export function AccountPage() {
     plan: 'Starter'
   });
 
-  // Estado para Troca de Senha
   const [passwords, setPasswords] = useState({ new: '', confirm: '' });
 
   useEffect(() => {
@@ -29,7 +27,6 @@ export function AccountPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Busca dados do perfil (tabela profiles)
       const { data: profileData } = await supabase
         .from('profiles')
         .select('*')
@@ -40,9 +37,9 @@ export function AccountPage() {
         id: user.id,
         email: user.email || '',
         name: profileData?.company_name || user.user_metadata?.full_name || '',
-        avatarUrl: profileData?.logo_url || '', // Usando logo como avatar por enquanto
+        avatarUrl: profileData?.logo_url || '',
         credits: profileData?.credits || 0,
-        plan: 'Pro' // Fixo por enquanto
+        plan: 'Pro'
       });
     } catch (error) {
       console.error(error);
@@ -54,17 +51,15 @@ export function AccountPage() {
   const handleUpdateProfile = async () => {
     setSaving(true);
     try {
-      // 1. Atualiza Nome (no profile e metadata)
       await supabase.auth.updateUser({
         data: { full_name: profile.name }
       });
 
       await supabase.from('profiles').update({
-        company_name: profile.name, // Sincronizando nome pessoal/empresa
+        company_name: profile.name,
         updated_at: new Date().toISOString()
       }).eq('id', profile.id);
 
-      // 2. Troca de Senha (se preenchido)
       if (passwords.new) {
         if (passwords.new !== passwords.confirm) throw new Error('As senhas não coincidem');
         if (passwords.new.length < 6) throw new Error('A senha deve ter no mínimo 6 caracteres');
@@ -74,8 +69,8 @@ export function AccountPage() {
       }
 
       alert('Perfil atualizado com sucesso!');
-    } catch (error: any) {
-      alert(error.message || 'Erro ao atualizar');
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Erro ao atualizar');
     } finally {
       setSaving(false);
     }
@@ -94,10 +89,9 @@ export function AccountPage() {
       const { data } = supabase.storage.from('uploads').getPublicUrl(filePath);
 
       setProfile(prev => ({ ...prev, avatarUrl: data.publicUrl }));
-      // Salva url no banco
       await supabase.from('profiles').update({ logo_url: data.publicUrl }).eq('id', profile.id);
       
-    } catch (error) {
+    } catch {
       alert('Erro ao enviar foto.');
     }
   };
@@ -114,10 +108,8 @@ export function AccountPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         
-        {/* COLUNA ESQUERDA: Avatar e Plano */}
         <div className="space-y-6">
           
-          {/* Card Avatar */}
           <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm text-center">
             <div className="relative w-32 h-32 mx-auto mb-4 group cursor-pointer">
               <div 
@@ -125,7 +117,7 @@ export function AccountPage() {
                 className="w-full h-full rounded-full overflow-hidden border-4 border-slate-50 shadow-inner"
               >
                 {profile.avatarUrl ? (
-                  <img src={profile.avatarUrl} className="w-full h-full object-cover" />
+                  <img src={profile.avatarUrl} className="w-full h-full object-cover" alt="Avatar" />
                 ) : (
                   <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-300">
                     <User size={48} />
@@ -142,7 +134,6 @@ export function AccountPage() {
             <p className="text-sm text-slate-400">{profile.email}</p>
           </div>
 
-          {/* Card Plano */}
           <div className="bg-gradient-to-br from-purple-600 to-indigo-700 p-6 rounded-2xl text-white shadow-lg">
             <div className="flex justify-between items-start mb-4">
               <div className="p-2 bg-white/20 rounded-lg">
@@ -161,7 +152,6 @@ export function AccountPage() {
 
         </div>
 
-        {/* COLUNA DIREITA: Formulário */}
         <div className="md:col-span-2 space-y-6">
           
           <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm">

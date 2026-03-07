@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../../lib/supabase';
-import { Save, ArrowLeft, Upload, Trash2, Plus, Lock, CheckCircle, Loader2, Image as ImageIcon, Layout, Grid3X3, AlertTriangle, Eye } from 'lucide-react';
+import { Save, ArrowLeft, Upload, Trash2, Plus, Lock, CheckCircle, Loader2, Image as ImageIcon, Layout, Grid3X3, Eye } from 'lucide-react';
 
 import { MemoryRunner } from '../../player/MemoryRunner';
 
@@ -32,83 +32,124 @@ export function MemoryEditor() {
     images: [] 
   });
 
-  useEffect(() => { loadEvent(); }, [id]);
+  useEffect(() => { 
+    loadEvent(); 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   const loadEvent = async () => {
     if (!id) return;
     try {
-      const { data } = await supabase.from('events').select('*').eq('id', id).single();
+      const { data, error } = await supabase.from('events').select('*').eq('id', id).single();
+      if (error) throw error;
       if (data && data.config) {
         setConfig(prev => ({ ...prev, ...data.config }));
         setStatus(data.status);
       }
-    } catch (e) { console.error(e); } finally { setLoading(false); }
+    } catch (e) { 
+      console.error('Erro ao carregar evento:', e); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const saveEvent = async () => {
+    if (!id) return;
     const required = DIFFICULTY_CONFIG[config.difficulty].pairs;
     if (config.images.length < required) {
       alert(`Você precisa de ${required} imagens para o nível ${DIFFICULTY_CONFIG[config.difficulty].label}.`);
       return;
     }
     setSaving(true);
-    const { error } = await supabase.from('events').update({ config }).eq('id', id);
-    setSaving(false);
-    if (error) alert('Erro: ' + error.message);
-    else alert('Salvo com sucesso!');
+    try {
+      const { error } = await supabase.from('events').update({ config }).eq('id', id);
+      if (error) throw error;
+      alert('Salvo com sucesso!');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Erro desconhecido';
+      alert('Erro: ' + msg);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const activateEvent = async () => {
+    if (!id) return;
     if (!confirm('Ativar por 1 crédito?')) return;
     setSaving(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data: profile } = await supabase.from('profiles').select('credits').eq('id', user.id).single();
-      if (!profile || profile.credits < 1) throw new Error('Sem créditos.');
-      await supabase.from('profiles').update({ credits: profile.credits - 1 }).eq('id', user.id);
-      await supabase.from('events').update({ status: 'active' }).eq('id', id);
+      
+      const { data: profile, error: profileError } = await supabase.from('profiles').select('credits').eq('id', user.id).single();
+      if (profileError) throw profileError;
+      if (!profile || profile.credits < 1) throw new Error('Sem créditos disponíveis.');
+
+      const { error: updateCreditError } = await supabase.from('profiles').update({ credits: profile.credits - 1 }).eq('id', user.id);
+      if (updateCreditError) throw updateCreditError;
+
+      const { error: eventError } = await supabase.from('events').update({ status: 'active' }).eq('id', id);
+      if (eventError) throw eventError;
+
       setStatus('active');
-      alert('Ativado!');
-    } catch (err: any) { alert(err.message); } finally { setSaving(false); }
+      alert('Evento ativado com sucesso!');
+    } catch (err) { 
+      const msg = err instanceof Error ? err.message : 'Erro na ativação';
+      alert(msg); 
+    } finally { 
+      setSaving(false); 
+    }
   };
 
   const handleAssetUpload = async (field: 'logoUrl' | 'backgroundImageUrl', e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !id) return;
     try {
       const path = `memory-${id}-${field}-${Date.now()}`;
-      const { error } = await supabase.storage.from('uploads').upload(path, file);
-      if (error) throw error;
+      const { error: uploadError } = await supabase.storage.from('uploads').upload(path, file);
+      if (uploadError) throw uploadError;
+      
       const { data } = supabase.storage.from('uploads').getPublicUrl(path);
-      setConfig({ ...config, [field]: data.publicUrl });
-    } catch (e: any) { alert('Erro: ' + e.message); }
+      setConfig(prev => ({ ...prev, [field]: data.publicUrl }));
+    } catch (err) { 
+      const msg = err instanceof Error ? err.message : 'Erro no upload';
+      alert('Erro: ' + msg); 
+    }
   };
 
   const handleCardsUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0 || !id) return;
+    
     setUploading(true);
     const newImages = [...config.images];
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        if (file.size > 2 * 1024 * 1024) continue;
+        if (file.size > 2 * 1024 * 1024) continue; // Pula arquivos maiores que 2MB
+        
         const path = `memory-card-${id}-${Date.now()}-${i}`;
-        const { error } = await supabase.storage.from('uploads').upload(path, file);
-        if (error) throw error;
+        const { error: uploadError } = await supabase.storage.from('uploads').upload(path, file);
+        if (uploadError) throw uploadError;
+        
         const { data } = supabase.storage.from('uploads').getPublicUrl(path);
         newImages.push(data.publicUrl);
       }
-      setConfig({ ...config, images: newImages });
-    } catch (e) { console.error(e); } finally {
+      setConfig(prev => ({ ...prev, images: newImages }));
+    } catch (err) { 
+      console.error('Erro no upload de cartas:', err);
+      alert('Ocorreu um erro ao subir algumas imagens.');
+    } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
   const removeCard = (index: number) => {
-    setConfig({ ...config, images: config.images.filter((_, i) => i !== index) });
+    setConfig(prev => ({ 
+      ...prev, 
+      images: prev.images.filter((_, i) => i !== index) 
+    }));
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-cyan-600" /></div>;
@@ -117,7 +158,7 @@ export function MemoryEditor() {
     <div className="min-h-screen bg-slate-50 font-sans pb-20">
       <header className="bg-white border-b px-6 py-4 sticky top-0 z-30 flex justify-between shadow-sm">
         <div className="flex items-center gap-4">
-          <button onClick={() => navigate('/games')} className="p-2 hover:bg-slate-100 rounded-full"><ArrowLeft size={20} /></button>
+          <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-slate-100 rounded-full" aria-label="Voltar"><ArrowLeft size={20} /></button>
           <h1 className="text-xl font-bold text-slate-800">Editor de Memória</h1>
         </div>
         <div className="flex gap-3">
@@ -133,13 +174,13 @@ export function MemoryEditor() {
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
           <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2"><ImageIcon size={20} className="text-cyan-600"/> Personalização Visual</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div onClick={() => logoInputRef.current?.click()} className="aspect-video rounded-xl border-2 border-dashed border-slate-300 hover:border-cyan-500 flex flex-col items-center justify-center overflow-hidden transition-all group cursor-pointer">
-               {config.logoUrl ? <img src={config.logoUrl} className="h-full object-contain" /> : <><Upload className="text-slate-400 mb-2 group-hover:text-cyan-500" /><span className="text-xs font-bold text-slate-500">Logo</span></>}
-               <input type="file" className="hidden" ref={logoInputRef} onChange={e => handleAssetUpload('logoUrl', e)} accept="image/*" />
+            <div onClick={() => logoInputRef.current?.click()} className="aspect-video rounded-xl border-2 border-dashed border-slate-300 hover:border-cyan-500 flex flex-col items-center justify-center overflow-hidden transition-all group cursor-pointer bg-slate-50">
+                {config.logoUrl ? <img src={config.logoUrl} className="h-full object-contain" alt="Logo do Evento" /> : <><Upload className="text-slate-400 mb-2 group-hover:text-cyan-500" /><span className="text-xs font-bold text-slate-500">Logo</span></>}
+                <input type="file" className="hidden" ref={logoInputRef} onChange={e => handleAssetUpload('logoUrl', e)} accept="image/*" />
             </div>
-            <div onClick={() => bgInputRef.current?.click()} className="aspect-video rounded-xl border-2 border-dashed border-slate-300 hover:border-cyan-500 flex flex-col items-center justify-center overflow-hidden transition-all group cursor-pointer">
-               {config.backgroundImageUrl ? <img src={config.backgroundImageUrl} className="w-full h-full object-cover" /> : <><ImageIcon className="text-slate-400 mb-2 group-hover:text-cyan-500" /><span className="text-xs font-bold text-slate-500">Fundo</span></>}
-               <input type="file" className="hidden" ref={bgInputRef} onChange={e => handleAssetUpload('backgroundImageUrl', e)} accept="image/*" />
+            <div onClick={() => bgInputRef.current?.click()} className="aspect-video rounded-xl border-2 border-dashed border-slate-300 hover:border-cyan-500 flex flex-col items-center justify-center overflow-hidden transition-all group cursor-pointer bg-slate-50">
+                {config.backgroundImageUrl ? <img src={config.backgroundImageUrl} className="w-full h-full object-cover" alt="Imagem de Fundo" /> : <><ImageIcon className="text-slate-400 mb-2 group-hover:text-cyan-500" /><span className="text-xs font-bold text-slate-500">Fundo</span></>}
+                <input type="file" className="hidden" ref={bgInputRef} onChange={e => handleAssetUpload('backgroundImageUrl', e)} accept="image/*" />
             </div>
           </div>
         </div>
@@ -173,14 +214,22 @@ export function MemoryEditor() {
           <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4">
             {config.images.map((url, idx) => (
               <div key={idx} className="aspect-square relative group bg-slate-100 rounded-xl overflow-hidden border border-slate-200 shadow-sm transition-transform hover:scale-105">
-                <img src={url} className="w-full h-full object-cover" /><div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"><button onClick={() => removeCard(idx)} className="p-2 bg-white rounded-full text-red-500 hover:scale-110 transition-transform shadow-lg"><Trash2 size={16} /></button></div>
+                <img src={url} className="w-full h-full object-cover" alt={`Carta ${idx + 1}`} />
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                  <button onClick={() => removeCard(idx)} className="p-2 bg-white rounded-full text-red-500 hover:scale-110 transition-transform shadow-lg" aria-label="Remover carta">
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               </div>
             ))}
-            <button onClick={() => fileInputRef.current?.click()} className="aspect-square rounded-xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 hover:border-cyan-500 hover:text-cyan-600 hover:bg-cyan-50 transition-all"><Plus size={24} /><span className="text-xs font-bold mt-1">Adicionar</span></button>
+            <button onClick={() => fileInputRef.current?.click()} className="aspect-square rounded-xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 hover:border-cyan-500 hover:text-cyan-600 hover:bg-cyan-50 transition-all">
+              <Plus size={24} />
+              <span className="text-xs font-bold mt-1">Adicionar</span>
+            </button>
           </div>
         </div>
 
-        {/* 4. PREVIEW AO VIVO ATUALIZADO (Aumentado) */}
+        {/* 4. PREVIEW AO VIVO */}
         <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
             <div className="flex items-center justify-between mb-8">
                 <h3 className="font-bold text-slate-800 flex items-center gap-2 text-xl">
@@ -191,7 +240,6 @@ export function MemoryEditor() {
                 </span>
             </div>
 
-            {/* CONTAINER EXPANDIDO: min-h-[850px] para caber todas as cartas quadradas */}
             <div className="w-full min-h-[850px] rounded-[2.5rem] p-6 bg-slate-100/50 border-4 border-slate-200/50 relative shadow-inner flex flex-col items-center">
                 <div className="w-full max-w-4xl h-full flex-1">
                     <MemoryRunner config={config} mode="preview" />
@@ -199,7 +247,7 @@ export function MemoryEditor() {
             </div>
             
             <p className="text-center text-sm text-slate-400 mt-6 max-w-lg mx-auto">
-                As cartas acima agora mantêm a proporção quadrada original. A área de preview se expande para mostrar todo o tabuleiro sem cortes.
+                Área de preview dinâmica. O tabuleiro se ajusta conforme as imagens são adicionadas.
             </p>
         </div>
       </div>

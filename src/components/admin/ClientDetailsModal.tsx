@@ -1,61 +1,87 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { 
   X, Calendar, CreditCard, Users, 
   Clock, CheckCircle2, AlertCircle, Loader2 
 } from 'lucide-react';
 
+// Definição de interfaces para remover os erros de 'any'
+interface Client {
+  id: string;
+  name: string;
+  email: string;
+  credits?: number;
+}
+
+interface ClientEvent {
+  id: string;
+  name: string;
+  status: string;
+  created_at: string;
+}
+
+interface ClientPayment {
+  id: string;
+  amount: number;
+  status: string;
+  created_at: string;
+}
+
 interface Props {
-  user: any;
+  user: Client;
   onClose: () => void;
 }
 
 export function ClientDetailsModal({ user, onClose }: Props) {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
-    events: [] as any[],
-    payments: [] as any[],
+    events: [] as ClientEvent[],
+    payments: [] as ClientPayment[],
     leadsCount: 0
   });
 
-  useEffect(() => {
-    fetchClientData();
-  }, [user.id]);
-
-  const fetchClientData = async () => {
+  // useCallback resolve o erro de dependência do useEffect
+  const fetchClientData = useCallback(async () => {
     try {
+      setLoading(true);
       // Busca Eventos do Cliente
       const { data: events } = await supabase
         .from('events')
-        .select('*')
+        .select('id, name, status, created_at')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
       // Busca Pagamentos do Cliente
       const { data: payments } = await supabase
         .from('payments')
-        .select('*')
+        .select('id, amount, status, created_at')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
-      // Busca contagem de Leads (Pistas)
+      // Busca contagem de Leads
       const { count: leadsCount } = await supabase
         .from('leads')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id);
 
       setStats({
-        events: events || [],
-        payments: payments || [],
+        events: (events as ClientEvent[]) || [],
+        payments: (payments as ClientPayment[]) || [],
         leadsCount: leadsCount || 0
       });
+    } catch (err) {
+      console.error("Erro ao buscar dados do cliente:", err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user.id]);
+
+  useEffect(() => {
+    fetchClientData();
+  }, [fetchClientData]);
 
   return (
-    <div className="fixed inset-0 z- flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col">
         
         {/* HEADER DO MODAL */}
@@ -108,7 +134,7 @@ export function ClientDetailsModal({ user, onClose }: Props) {
                     <div key={ev.id} className="p-4 bg-slate-50 rounded-2xl flex justify-between items-center border border-slate-100">
                       <div className="font-bold text-slate-700 text-sm truncate max-w-[150px]">{ev.name}</div>
                       <span className={`text-[10px] font-black px-2 py-1 rounded-md uppercase ${ev.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-500'}`}>
-                        {ev.status}
+                        {ev.status === 'active' ? 'Ativo' : ev.status}
                       </span>
                     </div>
                   ))}
@@ -125,7 +151,7 @@ export function ClientDetailsModal({ user, onClose }: Props) {
                   {stats.payments.slice(0, 5).map((pay) => (
                     <div key={pay.id} className="p-4 bg-slate-50 rounded-2xl flex justify-between items-center border border-slate-100">
                       <div>
-                        <div className="font-black text-slate-700 text-sm">R$ {pay.amount.toFixed(2)}</div>
+                        <div className="font-black text-slate-700 text-sm">R$ {Number(pay.amount).toFixed(2)}</div>
                         <div className="text-[10px] text-slate-400 font-bold">{new Date(pay.created_at).toLocaleDateString()}</div>
                       </div>
                       {pay.status === 'approved' ? (

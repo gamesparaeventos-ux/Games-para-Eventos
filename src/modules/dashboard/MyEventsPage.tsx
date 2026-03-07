@@ -3,13 +3,30 @@ import { supabase } from '../../lib/supabase';
 import { Edit, Trash2, Plus, Loader2, Calendar, MapPin, X, Save } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+interface EventConfig {
+  eventLocation?: string;
+  description?: string;
+  eventDate?: string;
+  title?: string;
+  [key: string]: unknown;
+}
+
+interface Event {
+  id: string;
+  name: string;
+  status: string;
+  config: EventConfig;
+  user_id: string;
+  created_at: string;
+}
+
 export function MyEventsPage() {
-  const [events, setEvents] = useState<any[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Estado para Edição
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editingEvent, setEditingEvent] = useState<any>(null);
+  const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [editForm, setEditForm] = useState({ name: '', location: '', notes: '', date: '' });
   const [saving, setSaving] = useState(false);
 
@@ -29,7 +46,7 @@ export function MyEventsPage() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setEvents(data || []);
+      setEvents((data as Event[]) || []);
     } catch (error) {
       console.error('Erro ao buscar eventos:', error);
     } finally {
@@ -40,21 +57,23 @@ export function MyEventsPage() {
   const handleDelete = async (id: string) => {
     if (!confirm('Tem certeza? Isso apagará o evento e todos os leads associados.')) return;
     try {
-      await supabase.from('events').delete().eq('id', id);
+      const { error } = await supabase.from('events').delete().eq('id', id);
+      if (error) throw error;
       fetchEvents();
     } catch (error) {
       console.error('Erro ao excluir:', error);
+      alert('Erro ao excluir evento.');
     }
   };
 
-  const openEditModal = (event: any) => {
+  const openEditModal = (event: Event) => {
     const config = event.config || {};
     setEditingEvent(event);
     setEditForm({
       name: event.name,
       location: config.eventLocation || '',
       notes: config.description || '',
-      date: config.eventDate || '' // Data apenas para visualização
+      date: config.eventDate || ''
     });
     setIsEditModalOpen(true);
   };
@@ -63,16 +82,14 @@ export function MyEventsPage() {
     if (!editingEvent) return;
     setSaving(true);
     try {
-      // Preserva a config antiga, atualiza apenas os campos permitidos
       const newConfig = {
         ...editingEvent.config,
-        title: editForm.name, // Atualiza título do jogo também
+        title: editForm.name,
         description: editForm.notes,
         eventLocation: editForm.location
-        // DATA NÃO É ATUALIZADA AQUI
       };
 
-      await supabase
+      const { error } = await supabase
         .from('events')
         .update({
           name: editForm.name,
@@ -80,9 +97,11 @@ export function MyEventsPage() {
         })
         .eq('id', editingEvent.id);
 
+      if (error) throw error;
+
       setIsEditModalOpen(false);
       fetchEvents();
-    } catch (error) {
+    } catch {
       alert('Erro ao salvar alterações.');
     } finally {
       setSaving(false);
@@ -159,7 +178,7 @@ export function MyEventsPage() {
           <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <h3 className="text-lg font-bold text-slate-800">Editar Evento</h3>
-              <button onClick={() => setIsEditModalOpen(false)}><X className="text-slate-400 hover:text-slate-600" /></button>
+              <button onClick={() => setIsEditModalOpen(false)} aria-label="Fechar modal"><X className="text-slate-400 hover:text-slate-600" /></button>
             </div>
             
             <div className="p-6 space-y-4">
@@ -170,7 +189,7 @@ export function MyEventsPage() {
               
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">Data (Bloqueado por segurança)</label>
-                <input type="date" value={editForm.date} disabled className="w-full px-4 py-2 border rounded-lg bg-slate-100 text-slate-500 cursor-not-allowed" />
+                <input type="text" value={editForm.date ? new Date(editForm.date).toLocaleDateString('pt-BR') : ''} disabled className="w-full px-4 py-2 border rounded-lg bg-slate-100 text-slate-500 cursor-not-allowed" />
                 <p className="text-xs text-slate-400 mt-1">A data não pode ser alterada para garantir a validade dos créditos.</p>
               </div>
 
@@ -187,7 +206,7 @@ export function MyEventsPage() {
 
             <div className="p-6 border-t border-slate-100 flex justify-end gap-3">
               <button onClick={() => setIsEditModalOpen(false)} className="px-4 py-2 text-slate-500 font-bold hover:bg-slate-50 rounded-lg">Cancelar</button>
-              <button onClick={handleSaveEdit} disabled={saving} className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg flex items-center gap-2">
+              <button onClick={handleSaveEdit} disabled={saving} className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg flex items-center gap-2 transition-all">
                 {saving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />} Salvar Alterações
               </button>
             </div>

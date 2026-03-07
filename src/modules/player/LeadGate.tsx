@@ -2,9 +2,17 @@ import React, { useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Loader2, Lock, X } from 'lucide-react';
 
+// Interface para as configurações do componente, removendo o 'any'
+interface LeadGateConfig {
+  primaryColor?: string;
+  logoUrl?: string;
+  title?: string;
+  description?: string;
+}
+
 interface LeadGateProps {
   eventId: string;
-  config: any;
+  config: LeadGateConfig | null;
   onPass: (leadId: string, name: string) => void;
   blockReason?: string | null; 
 }
@@ -54,8 +62,9 @@ export function LeadGate({ eventId, config, onPass, blockReason }: LeadGateProps
       onPass(data.id, data.name);
       
     } catch (error) {
-      console.error(error);
-      alert('Erro ao processar entrada. Tente novamente.');
+      console.error('Erro ao salvar lead:', error);
+      const msg = error instanceof Error ? error.message : 'Erro ao processar entrada.';
+      alert(msg + ' Tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -68,7 +77,10 @@ export function LeadGate({ eventId, config, onPass, blockReason }: LeadGateProps
   return (
     <div className="h-screen w-screen flex items-center justify-center bg-slate-900 overflow-hidden font-sans relative">
       {/* Background com a cor do tema */}
-      <div className="absolute inset-0 opacity-20 transition-colors duration-500" style={{ backgroundColor: config?.primaryColor || '#8b5cf6' }}></div>
+      <div 
+        className="absolute inset-0 opacity-20 transition-colors duration-500" 
+        style={{ backgroundColor: config?.primaryColor || '#8b5cf6' }}
+      ></div>
       
       {/* CARD PRINCIPAL (ESCALA TOTEM) */}
       <div className="bg-white rounded-[5vh] w-[90vw] md:w-[60vh] p-[5vh] shadow-2xl relative z-10 animate-fade-in flex flex-col justify-center">
@@ -84,13 +96,17 @@ export function LeadGate({ eventId, config, onPass, blockReason }: LeadGateProps
 
         {/* Logo */}
         {config?.logoUrl && (
-          <img src={config.logoUrl} className="h-[15vh] w-auto mx-auto mb-[4vh] object-contain" alt="Logo" />
+          <img src={config.logoUrl} className="h-[15vh] w-auto mx-auto mb-[4vh] object-contain" alt="Logo do Evento" />
         )}
         
         {/* Títulos */}
         <div className="text-center mb-[5vh]">
-          <h1 className="text-[4.5vh] leading-none font-black text-slate-800 mb-[1.5vh] uppercase tracking-tight">{config?.title || 'Bem-vindo!'}</h1>
-          <p className="text-slate-500 text-[2.2vh] font-medium leading-tight">{config?.description || 'Preencha seus dados para participar.'}</p>
+          <h1 className="text-[4.5vh] leading-none font-black text-slate-800 mb-[1.5vh] uppercase tracking-tight">
+            {config?.title || 'Bem-vindo!'}
+          </h1>
+          <p className="text-slate-500 text-[2.2vh] font-medium leading-tight">
+            {config?.description || 'Preencha seus dados para participar.'}
+          </p>
         </div>
 
         {/* Formulário - Inputs Gigantes */}

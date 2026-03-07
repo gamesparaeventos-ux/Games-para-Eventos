@@ -3,9 +3,18 @@ import { CreditCard, Check, RefreshCw, History, Plus } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { PaymentModal } from './PaymentModal';
 
+interface Transaction {
+  id: string;
+  user_id: string;
+  amount: number;
+  type: string;
+  description: string;
+  created_at: string;
+}
+
 export function CreditsPage() {
   const [credits, setCredits] = useState(0);
-  const [transactions, setTransactions] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -29,7 +38,7 @@ export function CreditsPage() {
 
       if (error) throw error;
 
-      setTransactions(transData || []);
+      setTransactions(transData as Transaction[] || []);
       
       // Calcula saldo somando tudo
       const balance = transData?.reduce((acc, curr) => acc + curr.amount, 0) || 0;
