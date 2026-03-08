@@ -1,76 +1,100 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "npm:@supabase/supabase-js";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Interface para tipar a resposta do Mercado Pago e evitar 'any'
-interface MPPreferenceResponse {
-  init_point: string;
-  [key: string]: unknown;
-}
-
 serve(async (req) => {
+  // 1. Lida com a requisição de segurança (CORS)
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
+    // 2. Validação do Token (JWT) vindo do frontend [cite: 12, 29]
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) throw new Error("Não autorizado: Token ausente");
+
+    const token = authHeader.replace("Bearer ", "");
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")! // 
     );
 
-    const authHeader = req.headers.get("Authorization");
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
     
-    if (!authHeader) throw new Error("Token ausente no cabeçalho");
-
-    // Validação do usuário
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(
-      authHeader.replace("Bearer ", "")
-    );
-
     if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Sessão inválida" }), {
+      console.error("JWT ERROR:", authError); // [cite: 13, 23]
+      return new Response(JSON.stringify({ error: "Sessão inválida ou expirada" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
+    // 3. Pega o valor enviado pelo frontend e garante que seja número [cite: 14, 30]
     const { amount } = await req.json();
+    const value = Number(amount);
 
-    const { data: payment, error: dbError } = await supabaseAdmin
-      .from("payments")
-      .insert({ user_id: user.id, amount, status: "pending" })
-      .select().single();
+    if (!value || value < 1) { // Valor mínimo de R$ 1,00 [cite: 2, 14, 30]
+      return new Response(JSON.stringify({ error: "O valor mínimo é R$ 1,00" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
 
-    if (dbError) throw dbError;
-
-    const mpRes = await fetch("https://api.mercadopago.com/checkout/preferences", {
+    // 4. Criação do pagamento no Mercado Pago [cite: 31]
+    const externalReference = crypto.randomUUID();
+    const mpResponse = await fetch("https://api.mercadopago.com/v1/payments", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${Deno.env.get("MP_ACCESS_TOKEN")}`,
-        "Content-Type": "application/json",
+        "Authorization": `Bearer ${Deno.env.get("MERCADO_PAGO_ACCESS_TOKEN")}`,
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        items: [{ title: "Créditos SaaS", quantity: 1, unit_price: amount, currency_id: "BRL" }],
-        external_reference: payment.id,
-        notification_url: "https://tglnjxmudguztgtusefj.supabase.co/functions/v1/mercadopago-webhook",
-      }),
+        transaction_amount: value,
+        payment_method_id: "pix",
+        description: "Créditos - Games para Eventos",
+        external_reference: externalReference,
+        payer: { email: user.email }
+      })
     });
 
-    // Tipagem da resposta da API externa
-    const mpData = (await mpRes.json()) as MPPreferenceResponse;
-    
-    return new Response(JSON.stringify({ init_point: mpData.init_point }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const payment = await mpResponse.json();
+
+    // 5. Verifica se o Mercado Pago aceitou (Evita Bad Request)
+    if (!mpResponse.ok) {
+      console.error("MP ERROR:", payment); // [cite: 17, 23]
+      throw new Error(payment.message || "Erro ao gerar pagamento no Mercado Pago");
+    }
+
+    // 6. Salva o registro no seu banco de dados [cite: 18, 33]
+    const { error: dbError } = await supabaseAdmin
+      .from("payments")
+      .insert({
+        user_id: user.id,
+        amount: value,
+        status: payment.status,
+        payment_method: "pix",
+        mp_payment_id: String(payment.id),
+        mp_external_reference: externalReference,
+        pix_qr_code: payment.point_of_interaction.transaction_data.qr_code,
+        pix_qr_code_base64: payment.point_of_interaction.transaction_data.qr_code_base64
+      });
+
+    if (dbError) console.error("DB ERROR:", dbError); // [cite: 18, 23]
+
+    // 7. Retorna os dados do PIX para o frontend [cite: 33]
+    return new Response(JSON.stringify({
+      qr_code: payment.point_of_interaction.transaction_data.qr_code,
+      qr_code_base64: payment.point_of_interaction.transaction_data.qr_code_base64,
+      status: payment.status
+    }), {
+      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
 
   } catch (err: unknown) {
-    // Tratamento seguro de erro sem 'any'
-    const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
-    console.error("Erro fatal na função:", errorMessage);
+    const msg = err instanceof Error ? err.message : "Erro desconhecido";
+    console.error("EDGE FUNCTION ERROR:", msg); // [cite: 19, 23]
     
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    return new Response(JSON.stringify({ error: msg }), {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
   }

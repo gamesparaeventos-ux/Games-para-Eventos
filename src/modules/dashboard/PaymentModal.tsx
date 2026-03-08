@@ -27,60 +27,43 @@ export function PaymentModal({ isOpen, onClose, onSuccess }: PaymentModalProps) 
 
       console.log(`Iniciando checkout para: ${user.email} (ID: ${user.id})`);
 
-      const FUNCTION_URL = "https://tglnjxmudguztgtusefj.supabase.co/functions/v1/create-pix-payment";
-      const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const { data, error } = await supabase.functions.invoke(
+        "create-payment",
+        {
+          body: {
+            package_id: "credits_1"
+          }
+        }
+      );
 
-      if (!ANON_KEY) {
-        alert("Erro de Configuração: Chave de API não encontrada.");
-        setLoading(false);
-        return;
-      }
-
-      const response = await fetch(FUNCTION_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${ANON_KEY}`,
-          'apikey': ANON_KEY
-        },
-        body: JSON.stringify({ 
-          user_id: user.id,
-          email: user.email,
-          amount: 0.50,
-          description: "Pacote Unitário (Teste)"
-        })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        console.error("Erro Backend:", data);
-        alert(`Não foi possível gerar o pagamento: ${data.details?.message || data.error || 'Erro desconhecido'}`);
+      if (error) {
+        console.error("Erro Backend:", error);
+        alert(`Não foi possível gerar o pagamento: ${error.message}`);
         setLoading(false);
         return;
       }
 
       if (!data?.init_point) {
-        alert('Erro: O Mercado Pago não retornou o link de pagamento.');
+        alert("Erro: O Mercado Pago não retornou o link de pagamento.");
         setLoading(false);
         return;
       }
 
       console.log("Link gerado com sucesso:", data.init_point);
 
-      const newWindow = window.open(data.init_point, '_blank');
-      
-      if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') { 
+      const newWindow = window.open(data.init_point, "_blank");
+
+      if (!newWindow || newWindow.closed || typeof newWindow.closed === "undefined") {
         alert("O navegador bloqueou a abertura da aba de pagamento. Redirecionando nesta aba...");
         window.location.href = data.init_point;
       }
 
       if (onSuccess) onSuccess();
-      setLoading(false);
 
     } catch (error) {
-      console.error('Erro fatal no Frontend:', error);
-      alert('Erro de conexão. Verifique sua internet e tente novamente.');
+      console.error("Erro fatal no Frontend:", error);
+      alert("Erro de conexão. Verifique sua internet e tente novamente.");
+    } finally {
       setLoading(false);
     }
   };
@@ -146,8 +129,12 @@ export function PaymentModal({ isOpen, onClose, onSuccess }: PaymentModalProps) 
           </div>
 
           <div className="flex justify-center gap-6 pt-2 text-xs text-slate-400 font-medium uppercase">
-             <div className="flex items-center gap-1"><ShieldCheck size={14} className="text-green-500" /> Compra Segura</div>
-             <div className="flex items-center gap-1"><ShieldCheck size={14} className="text-blue-500" /> Mercado Pago</div>
+             <div className="flex items-center gap-1">
+               <ShieldCheck size={14} className="text-green-500" /> Compra Segura
+             </div>
+             <div className="flex items-center gap-1">
+               <ShieldCheck size={14} className="text-blue-500" /> Mercado Pago
+             </div>
           </div>
 
         </div>
