@@ -1,6 +1,4 @@
-// @ts-expect-error: Deno std library import
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-// @ts-expect-error: Supabase JS import via npm
 import { createClient } from "npm:@supabase/supabase-js";
 
 const corsHeaders = {
@@ -8,22 +6,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Interfaces para evitar o uso de 'any'
-interface MPWebhookBody {
-  data?: { id: string };
-  resource?: string;
-  type?: string;
-  topic?: string;
-}
-
-interface MPPaymentData {
-  external_reference: string;
-  status: string;
-  id: number;
-}
-
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
 
   try {
     const supabaseAdmin = createClient(
@@ -31,89 +17,68 @@ serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const body = (await req.json()) as MPWebhookBody;
-    console.log("Notificação recebida do Mercado Pago:", body);
+    const body = await req.json();
+    const paymentId = body?.data?.id || body?.resource?.split("/").pop();
+    const type = body?.type || body?.topic;
 
-    const paymentId = body.data?.id || body.resource?.split('/').pop();
-    const type = body.type || body.topic;
+    if (!paymentId) {
+      return new Response(JSON.stringify({ received: true }), { headers: corsHeaders, status: 200 });
+    }
 
     if (type === "payment" || type === "merchant_order") {
-      
-      const mpRes = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
-        headers: {
-          "Authorization": `Bearer ${Deno.env.get("MP_ACCESS_TOKEN")}`,
-        },
-      });
+      const token = Deno.env.get("MERCADO_PAGO_ACCESS_TOKEN") || Deno.env.get("MP_ACCESS_TOKEN");
+      const mpRes = await fetch(
+        `https://api.mercadopago.com/v1/payments/${paymentId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
 
-      if (!mpRes.ok) throw new Error("Erro ao consultar pagamento no Mercado Pago");
-      
-      const paymentData = (await mpRes.json()) as MPPaymentData;
-      const externalReference = paymentData.external_reference; 
+      if (!mpRes.ok) throw new Error("Erro ao consultar Mercado Pago");
+
+      const paymentData = await mpRes.json();
       const status = paymentData.status;
-
-      console.log(`Pagamento ${paymentId} está com status: ${status}`);
+      const externalReference = paymentData.external_reference;
 
       if (status === "approved") {
-        const { data: payment, error: pError } = await supabaseAdmin
-          .from("payments")
-          .select("*")
-          .eq("id", externalReference)
-          .single();
-
-        if (pError || !payment) throw new Error("Pagamento não encontrado no banco de dados");
-
-        if (payment.status === "approved") {
-          return new Response(JSON.stringify({ message: "Pagamento já processado" }), { 
-            headers: { ...corsHeaders, "Content-Type": "application/json" } 
-          });
+        let query = supabaseAdmin.from("payments").select("*");
+        
+        if (externalReference && externalReference !== "null") {
+          query = query.eq("id", externalReference);
+        } else {
+          query = query.eq("mp_payment_id", paymentId.toString());
         }
 
-        // A. Atualiza a tabela 'payments'
-        await supabaseAdmin
-          .from("payments")
-          .update({ 
-            status: "approved", 
-            mp_payment_id: paymentId?.toString(),
-            approved_at: new Date().toISOString() 
-          })
-          .eq("id", externalReference);
+        const { data: payment, error: pError } = await query.single();
 
-        // B. Adiciona os créditos (Removida a variável 'profile' não utilizada)
-        const { error: profError } = await supabaseAdmin
-          .rpc('increment_user_credits', { 
-            user_id_input: payment.user_id, 
-            amount_to_add: 1 
-          });
+        if (pError || !payment) throw new Error("Pagamento não encontrado no banco");
 
-        if (profError) throw profError;
+        if (payment.status === "approved") {
+          return new Response(JSON.stringify({ message: "Já processado" }), { headers: corsHeaders, status: 200 });
+        }
 
-        // C. Registra em 'credit_transactions'
-        await supabaseAdmin
-          .from("credit_transactions")
-          .insert({
-            user_id: payment.user_id,
-            type: "purchase",
-            amount: 1,
-            reference_id: payment.id,
-            description: "Compra via Mercado Pago (Pix/Cartão)"
-          });
+        await supabaseAdmin.from("payments").update({
+          status: "approved",
+          mp_payment_id: paymentId.toString(),
+          approved_at: new Date().toISOString(),
+        }).eq("id", payment.id);
 
-        console.log(`Créditos liberados com sucesso para o usuário: ${payment.user_id}`);
+        const { data: profile } = await supabaseAdmin.from("profiles").select("credits").eq("id", payment.user_id).single();
+        const newCredits = (profile?.credits || 0) + 1;
+
+        await supabaseAdmin.from("profiles").update({ credits: newCredits }).eq("id", payment.user_id);
+
+        await supabaseAdmin.from("credit_transactions").insert({
+          user_id: payment.user_id,
+          type: "purchase",
+          amount: 1,
+          reference_id: payment.id,
+          description: "Compra Aprovada",
+        });
       }
     }
 
-    return new Response(JSON.stringify({ received: true }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 200,
-    });
-
+    return new Response(JSON.stringify({ received: true }), { headers: corsHeaders, status: 200 });
   } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
-    console.error("Erro no Webhook:", errorMessage);
-    
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 400,
-    });
+    const msg = err instanceof Error ? err.message : "Erro desconhecido";
+    return new Response(JSON.stringify({ error: msg }), { headers: corsHeaders, status: 400 });
   }
 });
