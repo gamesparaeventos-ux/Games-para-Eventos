@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Search, Download, Filter, User, Users, Calendar } from 'lucide-react';
+import { useAdmin } from '../../contexts/AdminContext';
 
 interface Lead {
   id: string;
@@ -8,55 +9,104 @@ interface Lead {
   email?: string;
   whatsapp?: string;
   score?: number;
+  event_id?: string;
   created_at: string;
-  events?: { name: string };
+  events?: { name: string } | { name: string }[] | null;
+}
+
+interface EventRow {
+  id: string;
+  name: string;
 }
 
 export function LeadsPage() {
+  const { effectiveUserId, impersonate } = useAdmin();
+
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [userEvents, setUserEvents] = useState<EventRow[]>([]);
 
-  useEffect(() => {
-    fetchLeads();
-  }, []);
-
-  const fetchLeads = async () => {
+  const fetchLeads = useCallback(async () => {
     setLoading(true);
+
     try {
-      // Busca leads com dados do evento relacionado
+      if (!effectiveUserId) {
+        setLeads([]);
+        setUserEvents([]);
+        return;
+      }
+
+      const { data: eventsData, error: eventsError } = await supabase
+        .from('events')
+        .select('id, name')
+        .eq('user_id', effectiveUserId)
+        .order('created_at', { ascending: false });
+
+      if (eventsError) throw eventsError;
+
+      const events = (eventsData as EventRow[]) || [];
+      setUserEvents(events);
+
+      const eventIds = events.map((event) => event.id);
+
+      if (eventIds.length === 0) {
+        setLeads([]);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('leads')
         .select(`
           *,
           events ( name )
         `)
+        .in('event_id', eventIds)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
+
       setLeads((data as Lead[]) || []);
     } catch (error) {
       console.error('Erro ao buscar leads:', error);
+      setLeads([]);
+      setUserEvents([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [effectiveUserId]);
 
-  const filteredLeads = leads.filter(lead => 
-    lead.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    lead.email?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  useEffect(() => {
+    fetchLeads();
+  }, [fetchLeads, impersonate.active, impersonate.targetUserId]);
+
+  const filteredLeads = useMemo(() => {
+    const term = searchTerm.toLowerCase();
+
+    return leads.filter(
+      (lead) =>
+        lead.name?.toLowerCase().includes(term) ||
+        lead.email?.toLowerCase().includes(term) ||
+        lead.whatsapp?.toLowerCase().includes(term)
+    );
+  }, [leads, searchTerm]);
 
   const exportCSV = () => {
     const headers = ['Nome,Email,Whatsapp,Score,Evento,Data'];
-    const rows = filteredLeads.map(l => 
-      `${l.name || ''},${l.email || ''},${l.whatsapp || ''},${l.score || 0},${l.events?.name || 'N/A'},${new Date(l.created_at).toLocaleDateString()}`
-    );
-    const csvContent = "data:text/csv;charset=utf-8," + [headers, ...rows].join("\n");
+
+    const rows = filteredLeads.map((l) => {
+      const eventName = Array.isArray(l.events)
+        ? l.events[0]?.name || 'N/A'
+        : l.events?.name || 'N/A';
+
+      return `${l.name || ''},${l.email || ''},${l.whatsapp || ''},${l.score || 0},${eventName},${new Date(l.created_at).toLocaleDateString()}`;
+    });
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers, ...rows].join('\n');
     const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "leads_export.csv");
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', 'leads_export.csv');
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -64,14 +114,13 @@ export function LeadsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in font-sans">
-      
-      {/* Cabeçalho */}
       <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Pistas</h1>
           <p className="text-slate-500 text-sm">Visualize todos os leads capturados em eventos</p>
         </div>
-        <button 
+
+        <button
           onClick={exportCSV}
           className="flex items-center gap-2 px-4 py-2 bg-white border border-purple-200 text-purple-600 rounded-lg hover:bg-purple-50 transition-colors font-bold text-sm"
         >
@@ -79,43 +128,59 @@ export function LeadsPage() {
         </button>
       </div>
 
-      {/* Cards de Resumo */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center"><Users size={24} /></div>
-          <div><p className="text-2xl font-bold text-slate-800">{leads.length}</p><p className="text-xs text-slate-500">Total de Leads</p></div>
+          <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center">
+            <Users size={24} />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-slate-800">{leads.length}</p>
+            <p className="text-xs text-slate-500">Total de Leads</p>
+          </div>
         </div>
+
         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 bg-purple-600 text-white rounded-xl flex items-center justify-center"><Filter size={24} /></div>
-          <div><p className="text-2xl font-bold text-slate-800">{filteredLeads.length}</p><p className="text-xs text-slate-500">Leads Filtrados</p></div>
+          <div className="w-12 h-12 bg-purple-600 text-white rounded-xl flex items-center justify-center">
+            <Filter size={24} />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-slate-800">{filteredLeads.length}</p>
+            <p className="text-xs text-slate-500">Leads Filtrados</p>
+          </div>
         </div>
+
         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center"><Calendar size={24} /></div>
-          <div><p className="text-2xl font-bold text-slate-800">0</p><p className="text-xs text-slate-500">Eventos</p></div>
+          <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center">
+            <Calendar size={24} />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-slate-800">{userEvents.length}</p>
+            <p className="text-xs text-slate-500">Eventos</p>
+          </div>
         </div>
       </div>
 
-      {/* Barra de Filtros */}
       <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex flex-col md:flex-row gap-4">
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-          <input 
-            type="text" 
-            placeholder="Buscar pistas..." 
+          <input
+            type="text"
+            placeholder="Buscar pistas..."
             value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
+            onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-purple-500 transition-all text-slate-700"
           />
         </div>
+
         <select className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-600 outline-none focus:border-purple-500">
           <option>Todos os eventos</option>
         </select>
+
         <select className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-600 outline-none focus:border-purple-500">
           <option>Todos os jogos</option>
         </select>
       </div>
 
-      {/* Tabela */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm text-slate-600">
@@ -129,9 +194,14 @@ export function LeadsPage() {
                 <th className="px-6 py-4 font-bold text-slate-700">Data</th>
               </tr>
             </thead>
+
             <tbody className="divide-y divide-slate-100">
               {loading ? (
-                <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-400">Carregando dados...</td></tr>
+                <tr>
+                  <td colSpan={6} className="px-6 py-8 text-center text-slate-400">
+                    Carregando dados...
+                  </td>
+                </tr>
               ) : filteredLeads.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center">
@@ -142,16 +212,28 @@ export function LeadsPage() {
                   </td>
                 </tr>
               ) : (
-                filteredLeads.map((lead) => (
-                  <tr key={lead.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 font-bold text-slate-800">{lead.name || '-'}</td>
-                    <td className="px-6 py-4">{lead.whatsapp || '-'}</td>
-                    <td className="px-6 py-4">{lead.email || '-'}</td>
-                    <td className="px-6 py-4"><span className="bg-purple-50 text-purple-700 px-2 py-1 rounded text-xs font-bold">{lead.events?.name || 'Geral'}</span></td>
-                    <td className="px-6 py-4 font-mono text-slate-500">{lead.score || 0}</td>
-                    <td className="px-6 py-4 text-xs text-slate-400">{new Date(lead.created_at).toLocaleDateString()}</td>
-                  </tr>
-                ))
+                filteredLeads.map((lead) => {
+                  const eventName = Array.isArray(lead.events)
+                    ? lead.events[0]?.name || 'Geral'
+                    : lead.events?.name || 'Geral';
+
+                  return (
+                    <tr key={lead.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-6 py-4 font-bold text-slate-800">{lead.name || '-'}</td>
+                      <td className="px-6 py-4">{lead.whatsapp || '-'}</td>
+                      <td className="px-6 py-4">{lead.email || '-'}</td>
+                      <td className="px-6 py-4">
+                        <span className="bg-purple-50 text-purple-700 px-2 py-1 rounded text-xs font-bold">
+                          {eventName}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 font-mono text-slate-500">{lead.score || 0}</td>
+                      <td className="px-6 py-4 text-xs text-slate-400">
+                        {new Date(lead.created_at).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

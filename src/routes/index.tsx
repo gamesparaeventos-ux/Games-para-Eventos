@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { supabase } from '../lib/supabase';
 import { Loader2 } from 'lucide-react';
 
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
-import { AdminProvider } from '../contexts/AdminContext';
+import { AdminProvider, useAdmin } from '../contexts/AdminContext';
 
 // Layouts e Website
 import { DashboardLayout } from '../layouts/DashboardLayout';
@@ -31,6 +31,7 @@ import AdminSettings from '../components/admin/AdminSettings';
 import AdminAudit from '../components/admin/AdminAudit';
 import AdminRisk from '../components/admin/AdminRisk';
 import AdminRefunds from '../components/admin/AdminRefunds';
+import AdminFaq from '../components/admin/AdminFaq';
 
 // Dashboard Cliente
 import { DashboardPage } from '../modules/dashboard/Dashboard';
@@ -64,11 +65,33 @@ interface EventConfig {
   type?: string;
 }
 
-const AdminGuard = ({ children }: { children: React.ReactNode }) => {
-
+const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
 
   if (loading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-slate-950 text-white">
+        Validando sessão...
+      </div>
+    );
+  }
+
+  if (!user) return <Navigate to="/login" replace />;
+
+  return <>{children}</>;
+};
+
+const AdminGuard = ({
+  children,
+  allowedRoles = ['admin', 'support', 'finance'],
+}: {
+  children: React.ReactNode;
+  allowedRoles?: Array<'admin' | 'support' | 'finance'>;
+}) => {
+  const { user, loading } = useAuth();
+  const { hasAdminAccess, roleLoading } = useAdmin();
+
+  if (loading || roleLoading) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-slate-950 text-white">
         Validando acesso...
@@ -78,15 +101,14 @@ const AdminGuard = ({ children }: { children: React.ReactNode }) => {
 
   if (!user) return <Navigate to="/admin/login" replace />;
 
-  if (user.email === 'gamesparaeventos@gmail.com') {
-    return <>{children}</>;
+  if (!hasAdminAccess(allowedRoles)) {
+    return <Navigate to="/dashboard" replace />;
   }
 
-  return <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
 };
 
 function EditorDispatcher() {
-
   const { id } = useParams();
   const location = useLocation();
   const state = location.state as { type?: string } | null;
@@ -95,25 +117,18 @@ function EditorDispatcher() {
   const [loading, setLoading] = useState(!state?.type);
 
   useEffect(() => {
-
     if (!type && id) {
-
       supabase
         .from('events')
         .select('config')
         .eq('id', id)
         .single()
         .then(({ data }) => {
-
           const config = data?.config as EventConfig | null;
-
           setType(config?.type || 'quiz');
           setLoading(false);
-
         });
-
     }
-
   }, [id, type]);
 
   if (loading) {
@@ -132,32 +147,24 @@ function EditorDispatcher() {
 }
 
 function PlayerDispatcher() {
-
   const { id } = useParams();
 
   const [type, setType] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-
     if (id) {
-
       supabase
         .from('events')
         .select('config')
         .eq('id', id)
         .single()
         .then(({ data }) => {
-
           const config = data?.config as EventConfig | null;
-
           setType(config?.type || 'quiz');
           setLoading(false);
-
         });
-
     }
-
   }, [id]);
 
   if (loading) {
@@ -176,110 +183,73 @@ function PlayerDispatcher() {
 }
 
 export function AppRoutes() {
-
   return (
-
     <QueryClientProvider client={queryClient}>
-
       <AuthProvider>
-
         <AdminProvider>
-
           <BrowserRouter>
-
             <Routes>
-
-              {/* ROTAS PÚBLICAS */}
-
               <Route path="/" element={<HomePage />} />
-
               <Route path="/login" element={<Login />} />
-
               <Route path="/admin/login" element={<AdminLogin />} />
-
               <Route path="/play/:id" element={<PlayerDispatcher />} />
-
               <Route path="/office/quiz" element={<QuizOfficePlayer />} />
-
               <Route path="/office/roulette/:id" element={<RoulettePlayer />} />
-
               <Route path="/office/memory/:id" element={<MemoryPlayer />} />
-
               <Route path="/office/balloon/:id" element={<BalloonPlayer />} />
 
-              {/* ROTAS ADMIN */}
-
               <Route path="/admin" element={<AdminGuard><AdminDashboard /></AdminGuard>} />
-
               <Route path="/admin/clients" element={<AdminGuard><AdminClients /></AdminGuard>} />
-
               <Route path="/admin/events" element={<AdminGuard><AdminEvents /></AdminGuard>} />
-
               <Route path="/admin/games" element={<AdminGuard><AdminGames /></AdminGuard>} />
-
-              <Route path="/admin/payments" element={<AdminGuard><AdminPayments /></AdminGuard>} />
-
-              <Route path="/admin/refunds" element={<AdminGuard><AdminRefunds /></AdminGuard>} />
-
+              <Route path="/admin/payments" element={<AdminGuard allowedRoles={['admin', 'finance']}><AdminPayments /></AdminGuard>} />
+              <Route path="/admin/refunds" element={<AdminGuard allowedRoles={['admin', 'finance']}><AdminRefunds /></AdminGuard>} />
               <Route path="/admin/leads" element={<AdminGuard><AdminLeads /></AdminGuard>} />
-
               <Route path="/admin/activations" element={<AdminGuard><AdminActivations /></AdminGuard>} />
+              <Route path="/admin/credits" element={<AdminGuard allowedRoles={['admin', 'finance']}><AdminCredits /></AdminGuard>} />
+              <Route path="/admin/reports" element={<AdminGuard allowedRoles={['admin', 'finance']}><AdminReports /></AdminGuard>} />
+              <Route path="/admin/support" element={<AdminGuard allowedRoles={['admin', 'support']}><AdminSupport /></AdminGuard>} />
+              <Route path="/admin/faqs" element={<AdminGuard allowedRoles={['admin', 'support']}><AdminFaq /></AdminGuard>} />
+              <Route path="/admin/settings" element={<AdminGuard allowedRoles={['admin']}><AdminSettings /></AdminGuard>} />
+              <Route path="/admin/audit" element={<AdminGuard allowedRoles={['admin']}><AdminAudit /></AdminGuard>} />
+              <Route path="/admin/risk" element={<AdminGuard allowedRoles={['admin', 'finance']}><AdminRisk /></AdminGuard>} />
 
-              <Route path="/admin/credits" element={<AdminGuard><AdminCredits /></AdminGuard>} />
-
-              <Route path="/admin/reports" element={<AdminGuard><AdminReports /></AdminGuard>} />
-
-              <Route path="/admin/support" element={<AdminGuard><AdminSupport /></AdminGuard>} />
-
-              <Route path="/admin/settings" element={<AdminGuard><AdminSettings /></AdminGuard>} />
-
-              <Route path="/admin/audit" element={<AdminGuard><AdminAudit /></AdminGuard>} />
-
-              <Route path="/admin/risk" element={<AdminGuard><AdminRisk /></AdminGuard>} />
-
-              {/* DASHBOARD CLIENTE */}
-
-              <Route element={<DashboardLayout />}>
-
+              <Route
+                element={
+                  <AuthGuard>
+                    <DashboardLayout />
+                  </AuthGuard>
+                }
+              >
                 <Route path="/dashboard" element={<DashboardPage />} />
-
                 <Route path="/events" element={<MyEventsPage />} />
-
                 <Route path="/games" element={<MyGamesPage />} />
-
                 <Route path="/events/new" element={<NewEventPage />} />
-
                 <Route path="/leads" element={<LeadsPage />} />
-
                 <Route path="/credits" element={<CreditsPage />} />
-
                 <Route path="/support" element={<SupportPage />} />
-
                 <Route path="/customize" element={<CustomizePage />} />
-
                 <Route path="/account" element={<AccountPage />} />
-
                 <Route path="/downloads" element={<DownloadsPage />} />
-
                 <Route path="/history" element={<HistoryPage />} />
-
               </Route>
 
-              <Route path="/event/:id/edit" element={<EditorDispatcher />} />
+              <Route
+                path="/event/:id/edit"
+                element={
+                  <AuthGuard>
+                    <EditorDispatcher />
+                  </AuthGuard>
+                }
+              />
 
               <Route path="*" element={<Navigate to="/" replace />} />
-
             </Routes>
-
           </BrowserRouter>
 
           <Toaster position="top-right" />
-
         </AdminProvider>
-
       </AuthProvider>
-
     </QueryClientProvider>
-
   );
 }

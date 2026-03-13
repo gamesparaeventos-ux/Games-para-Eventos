@@ -1,12 +1,25 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { User, Mail, Lock, Camera, Loader2, Save, CreditCard, Shield } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { useAdmin } from '../../contexts/AdminContext';
+
+interface ProfileRow {
+  id: string;
+  email?: string | null;
+  company_name?: string | null;
+  logo_url?: string | null;
+  credits?: number | null;
+}
 
 export function AccountPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { user } = useAuth();
+  const { effectiveUserId, impersonate } = useAdmin();
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  
+
   const [profile, setProfile] = useState({
     id: '',
     email: '',
@@ -18,27 +31,42 @@ export function AccountPage() {
 
   const [passwords, setPasswords] = useState({ new: '', confirm: '' });
 
-  useEffect(() => {
-    getProfile();
-  }, []);
-
-  const getProfile = async () => {
+  const getProfile = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      setLoading(true);
 
-      const { data: profileData } = await supabase
+      if (!effectiveUserId) {
+        setProfile({
+          id: '',
+          email: '',
+          name: '',
+          avatarUrl: '',
+          credits: 0,
+          plan: 'Starter'
+        });
+        return;
+      }
+
+      const { data: profileData, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', user.id)
-        .single();
+        .eq('id', effectiveUserId)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      const typedProfile = (profileData as ProfileRow | null) ?? null;
+      const isImpersonating = impersonate.active;
 
       setProfile({
-        id: user.id,
-        email: user.email || '',
-        name: profileData?.company_name || user.user_metadata?.full_name || '',
-        avatarUrl: profileData?.logo_url || '',
-        credits: profileData?.credits || 0,
+        id: effectiveUserId,
+        email: typedProfile?.email || (isImpersonating ? impersonate.targetUserEmail || '' : user?.email || ''),
+        name:
+          typedProfile?.company_name ||
+          (!isImpersonating ? user?.user_metadata?.full_name || user?.user_metadata?.name || '' : '') ||
+          '',
+        avatarUrl: typedProfile?.logo_url || '',
+        credits: typedProfile?.credits || 0,
         plan: 'Pro'
       });
     } catch (error) {
@@ -46,29 +74,55 @@ export function AccountPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [effectiveUserId, impersonate.active, impersonate.targetUserEmail, user]);
+
+  useEffect(() => {
+    getProfile();
+  }, [getProfile]);
 
   const handleUpdateProfile = async () => {
+    if (!profile.id) return;
+
     setSaving(true);
+
     try {
-      await supabase.auth.updateUser({
-        data: { full_name: profile.name }
-      });
+      if (impersonate.active && passwords.new) {
+        throw new Error('Não é permitido alterar senha durante a visualização de cliente.');
+      }
 
-      await supabase.from('profiles').update({
-        company_name: profile.name,
-        updated_at: new Date().toISOString()
-      }).eq('id', profile.id);
+      if (!impersonate.active) {
+        await supabase.auth.updateUser({
+          data: { full_name: profile.name }
+        });
+      }
 
-      if (passwords.new) {
-        if (passwords.new !== passwords.confirm) throw new Error('As senhas não coincidem');
-        if (passwords.new.length < 6) throw new Error('A senha deve ter no mínimo 6 caracteres');
-        
-        await supabase.auth.updateUser({ password: passwords.new });
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          company_name: profile.name,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', profile.id);
+
+      if (profileError) throw profileError;
+
+      if (!impersonate.active && passwords.new) {
+        if (passwords.new !== passwords.confirm) {
+          throw new Error('As senhas não coincidem');
+        }
+
+        if (passwords.new.length < 6) {
+          throw new Error('A senha deve ter no mínimo 6 caracteres');
+        }
+
+        const { error: passwordError } = await supabase.auth.updateUser({ password: passwords.new });
+        if (passwordError) throw passwordError;
+
         setPasswords({ new: '', confirm: '' });
       }
 
       alert('Perfil atualizado com sucesso!');
+      await getProfile();
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Erro ao atualizar');
     } finally {
@@ -78,41 +132,51 @@ export function AccountPage() {
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !profile.id) return;
 
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `avatar-${Math.random()}.${fileExt}`;
       const filePath = `avatars/${fileName}`;
 
-      await supabase.storage.from('uploads').upload(filePath, file);
+      const { error: uploadError } = await supabase.storage.from('uploads').upload(filePath, file);
+      if (uploadError) throw uploadError;
+
       const { data } = supabase.storage.from('uploads').getPublicUrl(filePath);
 
       setProfile(prev => ({ ...prev, avatarUrl: data.publicUrl }));
-      await supabase.from('profiles').update({ logo_url: data.publicUrl }).eq('id', profile.id);
-      
+
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ logo_url: data.publicUrl })
+        .eq('id', profile.id);
+
+      if (updateError) throw updateError;
     } catch {
       alert('Erro ao enviar foto.');
     }
   };
 
-  if (loading) return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin text-purple-600" /></div>;
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <Loader2 className="animate-spin text-purple-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-fade-in font-sans pb-20">
-      
       <div>
         <h1 className="text-2xl font-bold text-slate-800">Minha Conta</h1>
         <p className="text-slate-500">Gerencie seus dados pessoais e segurança.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        
         <div className="space-y-6">
-          
           <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm text-center">
             <div className="relative w-32 h-32 mx-auto mb-4 group cursor-pointer">
-              <div 
+              <div
                 onClick={() => fileInputRef.current?.click()}
                 className="w-full h-full rounded-full overflow-hidden border-4 border-slate-50 shadow-inner"
               >
@@ -124,13 +188,24 @@ export function AccountPage() {
                   </div>
                 )}
               </div>
-              <div onClick={() => fileInputRef.current?.click()} className="absolute bottom-0 right-0 bg-purple-600 text-white p-2 rounded-full shadow-lg hover:bg-purple-700 transition-colors">
+
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="absolute bottom-0 right-0 bg-purple-600 text-white p-2 rounded-full shadow-lg hover:bg-purple-700 transition-colors"
+              >
                 <Camera size={16} />
               </div>
-              <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleAvatarUpload} />
+
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept="image/*"
+                onChange={handleAvatarUpload}
+              />
             </div>
-            
-            <h2 className="text-lg font-bold text-slate-800">{profile.name}</h2>
+
+            <h2 className="text-lg font-bold text-slate-800">{profile.name || 'Sem nome'}</h2>
             <p className="text-sm text-slate-400">{profile.email}</p>
           </div>
 
@@ -141,34 +216,34 @@ export function AccountPage() {
               </div>
               <span className="bg-white/20 text-xs font-bold px-2 py-1 rounded uppercase">Ativo</span>
             </div>
+
             <p className="text-purple-100 text-sm mb-1">Plano Atual</p>
             <h3 className="text-2xl font-bold mb-4">Premium SaaS</h3>
-            
+
             <div className="flex justify-between items-center text-sm pt-4 border-t border-white/20">
               <span>Créditos:</span>
               <span className="font-bold text-xl">{profile.credits}</span>
             </div>
           </div>
-
         </div>
 
         <div className="md:col-span-2 space-y-6">
-          
           <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm">
             <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
               <User className="text-purple-600" size={20} /> Dados Pessoais
             </h3>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">Nome Completo</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={profile.name}
-                  onChange={e => setProfile({...profile, name: e.target.value})}
+                  onChange={e => setProfile({ ...profile, name: e.target.value })}
                   className="w-full px-4 py-2 border rounded-lg outline-none focus:border-purple-500 bg-slate-50 focus:bg-white transition-all"
                 />
               </div>
+
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">E-mail</label>
                 <div className="flex items-center px-4 py-2 border rounded-lg bg-slate-100 text-slate-500 cursor-not-allowed">
@@ -184,30 +259,40 @@ export function AccountPage() {
             <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
               <Shield className="text-purple-600" size={20} /> Segurança
             </h3>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">Nova Senha</label>
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                  <input 
-                    type="password" 
-                    placeholder="Deixe em branco para não alterar"
+                  <input
+                    type="password"
+                    placeholder={
+                      impersonate.active
+                        ? 'Indisponível durante a visualização'
+                        : 'Deixe em branco para não alterar'
+                    }
                     value={passwords.new}
-                    onChange={e => setPasswords({...passwords, new: e.target.value})}
-                    className="w-full pl-10 pr-4 py-2 border rounded-lg outline-none focus:border-purple-500 transition-all"
+                    disabled={impersonate.active}
+                    onChange={e => setPasswords({ ...passwords, new: e.target.value })}
+                    className="w-full pl-10 pr-4 py-2 border rounded-lg outline-none focus:border-purple-500 transition-all disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
                   />
                 </div>
               </div>
-              {passwords.new && (
+
+              {!impersonate.active && passwords.new && (
                 <div className="animate-fade-in">
                   <label className="block text-sm font-bold text-slate-700 mb-1">Confirmar Senha</label>
-                  <input 
-                    type="password" 
+                  <input
+                    type="password"
                     placeholder="Repita a nova senha"
                     value={passwords.confirm}
-                    onChange={e => setPasswords({...passwords, confirm: e.target.value})}
-                    className={`w-full px-4 py-2 border rounded-lg outline-none transition-all ${passwords.confirm && passwords.new !== passwords.confirm ? 'border-red-500 focus:border-red-500' : 'focus:border-purple-500'}`}
+                    onChange={e => setPasswords({ ...passwords, confirm: e.target.value })}
+                    className={`w-full px-4 py-2 border rounded-lg outline-none transition-all ${
+                      passwords.confirm && passwords.new !== passwords.confirm
+                        ? 'border-red-500 focus:border-red-500'
+                        : 'focus:border-purple-500'
+                    }`}
                   />
                   {passwords.confirm && passwords.new !== passwords.confirm && (
                     <p className="text-xs text-red-500 mt-1">As senhas não coincidem.</p>
@@ -218,7 +303,7 @@ export function AccountPage() {
           </div>
 
           <div className="flex justify-end">
-            <button 
+            <button
               onClick={handleUpdateProfile}
               disabled={saving}
               className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:shadow-purple-200 transition-all disabled:opacity-50"
@@ -227,7 +312,6 @@ export function AccountPage() {
               Salvar Alterações
             </button>
           </div>
-
         </div>
       </div>
     </div>

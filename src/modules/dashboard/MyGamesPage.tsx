@@ -1,18 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
-import { 
-  Edit, 
-  Loader2, 
-  Zap, 
-  Download, 
-  Brain, 
-  Gift, 
-  Ghost, 
-  PartyPopper, 
+import {
+  Edit,
+  Loader2,
+  Zap,
+  Download,
+  Brain,
+  Gift,
+  Ghost,
+  PartyPopper,
   Gamepad2,
   CheckCircle2
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useAdmin } from '../../contexts/AdminContext';
 
 interface GameConfig {
   type: 'roulette' | 'quiz' | 'memory' | 'balloon';
@@ -29,66 +30,74 @@ interface Game {
 }
 
 export function MyGamesPage() {
+  const { effectiveUserId, impersonate } = useAdmin();
+
   const [games, setGames] = useState<Game[]>([]);
   const [credits, setCredits] = useState(0);
   const [loading, setLoading] = useState(true);
   const [activatingId, setActivatingId] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      setLoading(true);
+
+      if (!effectiveUserId) {
+        setGames([]);
+        setCredits(0);
+        return;
+      }
 
       const { data: gamesData, error: gamesError } = await supabase
         .from('events')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', effectiveUserId)
         .order('created_at', { ascending: false });
 
       if (gamesError) throw gamesError;
       setGames((gamesData as Game[]) || []);
 
-      const { data: profileData } = await supabase
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('credits')
-        .eq('id', user.id)
-        .single();
+        .eq('id', effectiveUserId)
+        .maybeSingle();
 
-      if (profileData) {
-        setCredits(profileData.credits);
-      }
+      if (profileError) throw profileError;
 
+      setCredits(profileData?.credits || 0);
     } catch (error) {
       console.error('Erro ao buscar dados:', error);
+      setGames([]);
+      setCredits(0);
     } finally {
       setLoading(false);
     }
-  };
+  }, [effectiveUserId]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData, impersonate.active, impersonate.targetUserId]);
 
   const activateGame = async (game: Game) => {
+    if (!effectiveUserId) return;
     if (!confirm(`Confirmar ativação de "${game.name}" por 1 crédito?`)) return;
-    
-    setActivatingId(game.id);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
 
+    setActivatingId(game.id);
+
+    try {
       if (credits < 1) {
         alert('Créditos insuficientes. Por favor, recarregue.');
         return;
       }
 
-      setCredits(prev => prev - 1);
+      const newCredits = credits - 1;
+      setCredits(newCredits);
 
       const { error: creditError } = await supabase
         .from('profiles')
-        .update({ credits: credits - 1 })
-        .eq('id', user.id);
+        .update({ credits: newCredits })
+        .eq('id', effectiveUserId);
 
       if (creditError) throw creditError;
 
@@ -97,7 +106,7 @@ export function MyGamesPage() {
 
       const { error: eventError } = await supabase
         .from('events')
-        .update({ 
+        .update({
           status: 'active',
           active_until: activeUntil.toISOString()
         })
@@ -106,11 +115,10 @@ export function MyGamesPage() {
       if (eventError) throw eventError;
 
       await fetchData();
-
     } catch (error) {
       console.error('Erro:', error);
       alert('Erro na ativação. Seus créditos não foram descontados.');
-      setCredits(prev => prev + 1);
+      setCredits((prev) => prev + 1);
     } finally {
       setActivatingId(null);
     }
@@ -118,19 +126,29 @@ export function MyGamesPage() {
 
   const getGameConfig = (type: string) => {
     switch (type) {
-      case 'roulette': return { icon: Gift, label: 'Roleta' };
-      case 'quiz': return { icon: Brain, label: 'Quiz' };
-      case 'memory': return { icon: Ghost, label: 'Memória' };
-      case 'balloon': return { icon: PartyPopper, label: 'Balão' };
-      default: return { icon: Gamepad2, label: 'Jogo' };
+      case 'roulette':
+        return { icon: Gift, label: 'Roleta' };
+      case 'quiz':
+        return { icon: Brain, label: 'Quiz' };
+      case 'memory':
+        return { icon: Ghost, label: 'Memória' };
+      case 'balloon':
+        return { icon: PartyPopper, label: 'Balão' };
+      default:
+        return { icon: Gamepad2, label: 'Jogo' };
     }
   };
 
-  if (loading) return <div className="flex h-screen items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-purple-600" size={32} /></div>;
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50">
+        <Loader2 className="animate-spin text-purple-600" size={32} />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans p-6 md:p-10 pb-20">
-      
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Meus Jogos</h1>
@@ -139,12 +157,14 @@ export function MyGamesPage() {
 
         <div className="flex items-center gap-3">
           <div className="bg-white border border-slate-200 rounded-full px-5 py-2.5 flex items-center gap-3 shadow-sm">
-             <Zap size={18} className="text-purple-600 fill-purple-600" />
-             <span className="font-bold text-slate-800 text-lg">{credits} <span className="text-sm font-normal text-slate-500 ml-1">créditos</span></span>
-             <div className="h-4 w-[1px] bg-slate-300 mx-1"></div>
-             <Link to="/credits" className="text-sm font-bold text-purple-600 hover:text-purple-700 transition-colors">
-               Adicionar
-             </Link>
+            <Zap size={18} className="text-purple-600 fill-purple-600" />
+            <span className="font-bold text-slate-800 text-lg">
+              {credits} <span className="text-sm font-normal text-slate-500 ml-1">créditos</span>
+            </span>
+            <div className="h-4 w-[1px] bg-slate-300 mx-1"></div>
+            <Link to="/credits" className="text-sm font-bold text-purple-600 hover:text-purple-700 transition-colors">
+              Adicionar
+            </Link>
           </div>
         </div>
       </div>
@@ -166,7 +186,7 @@ export function MyGamesPage() {
             const gameType = game.config?.type || 'unknown';
             const configDisplay = getGameConfig(gameType);
             const Icon = configDisplay.icon;
-            
+
             const now = new Date();
             const activeUntil = game.active_until ? new Date(game.active_until) : null;
             const isActive = game.status === 'active' && activeUntil && activeUntil > now;
@@ -174,26 +194,32 @@ export function MyGamesPage() {
             const isExpired = !isDraft && !isActive;
 
             return (
-              <div key={game.id} className="bg-white p-5 rounded-[1.5rem] border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row items-center gap-6">
-                
+              <div
+                key={game.id}
+                className="bg-white p-5 rounded-[1.5rem] border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row items-center gap-6"
+              >
                 <div className="w-16 h-16 bg-slate-100 text-slate-500 rounded-2xl flex items-center justify-center shrink-0">
                   <Icon size={32} strokeWidth={1.5} />
                 </div>
 
                 <div className="flex-1 text-center md:text-left w-full">
                   <h3 className="text-lg font-bold text-slate-800">{game.name}</h3>
-                  <p className="text-sm text-slate-400 font-medium mb-2">{configDisplay.label} • {game.config?.description || 'Sem descrição'}</p>
-                  
+                  <p className="text-sm text-slate-400 font-medium mb-2">
+                    {configDisplay.label} • {game.config?.description || 'Sem descrição'}
+                  </p>
+
                   <div className="flex items-center justify-center md:justify-start gap-3">
                     {isActive && (
                       <>
                         <span className="bg-green-100 text-green-700 text-xs font-bold px-2.5 py-1 rounded-md border border-green-200 flex items-center gap-1">
                           <CheckCircle2 size={12} /> Ativo
                         </span>
-                        <span className="text-xs text-slate-400">Expira em: {activeUntil?.toLocaleDateString()}</span>
+                        <span className="text-xs text-slate-400">
+                          Expira em: {activeUntil?.toLocaleDateString()}
+                        </span>
                       </>
                     )}
-                    
+
                     {isDraft && (
                       <>
                         <span className="bg-slate-100 text-slate-600 text-xs font-bold px-2.5 py-1 rounded-md border border-slate-200">
@@ -215,20 +241,23 @@ export function MyGamesPage() {
                 </div>
 
                 <div className="flex items-center gap-4 w-full md:w-auto justify-center md:justify-end border-t md:border-t-0 pt-4 md:pt-0 border-slate-100">
-                  
                   {!isActive && (
-                    <button 
+                    <button
                       onClick={() => activateGame(game)}
                       disabled={activatingId === game.id}
                       className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 shadow-md shadow-purple-100 transition-all whitespace-nowrap"
                     >
-                      {activatingId === game.id ? <Loader2 className="animate-spin" size={16} /> : <Zap size={16} fill="currentColor" />}
+                      {activatingId === game.id ? (
+                        <Loader2 className="animate-spin" size={16} />
+                      ) : (
+                        <Zap size={16} fill="currentColor" />
+                      )}
                       Ativar (1 crédito)
                     </button>
                   )}
 
                   {isActive && (
-                    <button 
+                    <button
                       onClick={() => window.open(`/play/${game.id}`, '_blank')}
                       className="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 shadow-md shadow-green-100 transition-all whitespace-nowrap"
                     >
@@ -236,24 +265,22 @@ export function MyGamesPage() {
                     </button>
                   )}
 
-                  <Link 
-                    to="/downloads" 
+                  <Link
+                    to="/downloads"
                     className="flex items-center gap-2 text-slate-400 hover:text-purple-600 font-bold text-sm transition-colors"
                   >
                     <Download size={18} />
                     <span className="hidden sm:inline">Baixar Offline</span>
                   </Link>
 
-                  <button 
+                  <button
                     onClick={() => navigate(`/event/${game.id}/edit`)}
                     className="w-10 h-10 flex items-center justify-center border border-slate-200 rounded-xl text-slate-400 hover:text-purple-600 hover:border-purple-200 transition-all bg-white"
                     title="Editar Jogo"
                   >
                     <Edit size={18} />
                   </button>
-
                 </div>
-
               </div>
             );
           })

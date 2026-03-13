@@ -1,22 +1,39 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { 
-  CreditCard, 
-  Calendar, 
-  Gamepad2, 
-  Download, 
-  Plus, 
+import {
+  CreditCard,
+  Calendar,
+  Gamepad2,
+  Download,
+  Plus,
   Users,
   CheckCircle,
   Circle
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+import { useAdmin } from '../../contexts/AdminContext';
 
-// ADICIONEI 'export' AQUI:
+interface DashboardStats {
+  credits: number;
+  events: number;
+  games: number;
+  leads: number;
+}
+
+interface ProfileRow {
+  id: string;
+  name: string | null;
+  email: string | null;
+  credits: number | null;
+}
+
 export function DashboardPage() {
+  const { user, profile } = useAuth();
+  const { effectiveUserId, impersonate } = useAdmin();
+
   const [userName, setUserName] = useState('Visitante');
-  
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<DashboardStats>({
     credits: 0,
     events: 0,
     games: 0,
@@ -26,39 +43,108 @@ export function DashboardPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          setUserName(user.user_metadata?.name || 'Admin');
-          
-          const [events, leads] = await Promise.all([
-            supabase.from('events').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-            supabase.from('leads').select('*', { count: 'exact', head: true })
+        if (!effectiveUserId) {
+          setUserName('Visitante');
+          setStats({
+            credits: 0,
+            events: 0,
+            games: 0,
+            leads: 0
+          });
+          return;
+        }
+
+        let currentProfile: ProfileRow | null = null;
+
+        if (impersonate.active) {
+          const { data: impersonatedProfile, error: profileError } = await supabase
+            .from('profiles')
+            .select('id, name, email, credits')
+            .eq('id', effectiveUserId)
+            .maybeSingle();
+
+          if (profileError) throw profileError;
+          currentProfile = impersonatedProfile as ProfileRow | null;
+        } else {
+          currentProfile = (profile as ProfileRow | null) ?? null;
+
+          if (!currentProfile) {
+            const { data: ownProfile, error: ownProfileError } = await supabase
+              .from('profiles')
+              .select('id, name, email, credits')
+              .eq('id', effectiveUserId)
+              .maybeSingle();
+
+            if (ownProfileError) throw ownProfileError;
+            currentProfile = ownProfile as ProfileRow | null;
+          }
+        }
+
+        const displayName =
+          currentProfile?.name ||
+          user?.user_metadata?.name ||
+          currentProfile?.email ||
+          user?.email ||
+          'Usuário';
+
+        const [{ count: eventsCount, error: eventsError }, { data: userEvents, error: userEventsError }] =
+          await Promise.all([
+            supabase
+              .from('events')
+              .select('*', { count: 'exact', head: true })
+              .eq('user_id', effectiveUserId),
+            supabase
+              .from('events')
+              .select('id')
+              .eq('user_id', effectiveUserId)
           ]);
 
-          setStats({
-            credits: 99, 
-            events: events.count || 0,
-            games: events.count || 0,
-            leads: leads.count || 0
-          });
+        if (eventsError) throw eventsError;
+        if (userEventsError) throw userEventsError;
+
+        const eventIds = (userEvents || []).map((event) => event.id);
+        let leadsCount = 0;
+
+        if (eventIds.length > 0) {
+          const { count, error: leadsError } = await supabase
+            .from('leads')
+            .select('*', { count: 'exact', head: true })
+            .in('event_id', eventIds);
+
+          if (leadsError) throw leadsError;
+          leadsCount = count || 0;
         }
+
+        const totalEvents = eventsCount || 0;
+
+        setUserName(displayName);
+        setStats({
+          credits: currentProfile?.credits || 0,
+          events: totalEvents,
+          games: totalEvents,
+          leads: leadsCount
+        });
       } catch (error) {
-        console.error("Erro no dashboard:", error);
+        console.error('Erro no dashboard:', error);
+        setStats({
+          credits: 0,
+          events: 0,
+          games: 0,
+          leads: 0
+        });
       }
     };
+
     fetchData();
-  }, []);
+  }, [effectiveUserId, impersonate.active, profile, user]);
 
   return (
     <div className="space-y-8 animate-fade-in font-sans text-slate-600">
-      
-      {/* Cabeçalho */}
       <div>
         <h1 className="text-2xl font-bold text-slate-800">Olá, {userName} 👋</h1>
         <p className="text-slate-500">Bem-vindo de volta ao seu painel.</p>
       </div>
 
-      {/* Cards de Estatísticas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-start gap-4">
           <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center shrink-0">
@@ -101,7 +187,6 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* Ações Rápidas */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Link to="/events/new" className="bg-purple-600 rounded-2xl p-6 text-white shadow-lg hover:scale-[1.02] transition-transform flex flex-col justify-between h-32">
           <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
@@ -125,7 +210,6 @@ export function DashboardPage() {
         </Link>
       </div>
 
-      {/* Primeiros Passos */}
       <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm">
         <h3 className="font-bold text-slate-800 mb-6">Primeiros Passos</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

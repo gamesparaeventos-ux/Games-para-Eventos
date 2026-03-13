@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { CreditCard, Check, RefreshCw, History, Plus } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { PaymentModal } from './PaymentModal';
+import { useAdmin } from '../../contexts/AdminContext';
 
 interface Transaction {
   id: string;
@@ -13,39 +14,37 @@ interface Transaction {
 }
 
 export function CreditsPage() {
+  const { effectiveUserId, impersonate } = useAdmin();
+
   const [credits, setCredits] = useState(0);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
+
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) return;
+      if (!effectiveUserId) {
+        setCredits(0);
+        setTransactions([]);
+        return;
+      }
 
-      const userId = userData.user.id;
-
-      // saldo real vem do profile
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('credits')
-        .eq('id', userId)
-        .single();
+        .eq('id', effectiveUserId)
+        .maybeSingle();
 
       if (profileError) throw profileError;
 
       setCredits(profileData?.credits ?? 0);
 
-      // histórico continua vindo de transactions, se existir
       const { data: transData, error: transError } = await supabase
-        .from('transactions')
+        .from('credit_transactions')
         .select('*')
-        .eq('user_id', userId)
+        .eq('user_id', effectiveUserId)
         .order('created_at', { ascending: false });
 
       if (transError) {
@@ -56,10 +55,16 @@ export function CreditsPage() {
       }
     } catch (error) {
       console.error('Erro ao carregar créditos:', error);
+      setCredits(0);
+      setTransactions([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [effectiveUserId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData, impersonate.active, impersonate.targetUserId]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -68,6 +73,7 @@ export function CreditsPage() {
           <h1 className="text-2xl font-bold text-gray-800">Créditos</h1>
           <p className="text-gray-500">Gerencie suas ativações disponíveis</p>
         </div>
+
         <button
           onClick={loadData}
           className="text-sm flex items-center gap-2 text-gray-500 hover:text-purple-600 bg-white border border-gray-200 px-4 py-2 rounded-lg transition-colors"
@@ -129,12 +135,14 @@ export function CreditsPage() {
               <p className="text-sm text-gray-400 text-center py-4">Nenhum pagamento realizado ainda.</p>
             ) : (
               <div className="space-y-2">
-                {transactions.filter(t => t.type === 'purchase').map(t => (
-                  <div key={t.id} className="flex justify-between p-3 bg-gray-50 rounded-lg">
-                    <span className="text-sm font-medium text-gray-700">{t.description}</span>
-                    <span className="text-sm font-bold text-green-600">+ {t.amount}</span>
-                  </div>
-                ))}
+                {transactions
+                  .filter(t => t.type === 'purchase')
+                  .map(t => (
+                    <div key={t.id} className="flex justify-between p-3 bg-gray-50 rounded-lg">
+                      <span className="text-sm font-medium text-gray-700">{t.description}</span>
+                      <span className="text-sm font-bold text-green-600">+ {t.amount}</span>
+                    </div>
+                  ))}
               </div>
             )}
           </div>
@@ -153,7 +161,8 @@ export function CreditsPage() {
                   <div>
                     <p className="text-sm font-bold text-gray-800">{t.description || 'Movimentação'}</p>
                     <p className="text-[10px] text-gray-400">
-                      {new Date(t.created_at).toLocaleDateString('pt-BR')} às {new Date(t.created_at).toLocaleTimeString('pt-BR')}
+                      {new Date(t.created_at).toLocaleDateString('pt-BR')} às{' '}
+                      {new Date(t.created_at).toLocaleTimeString('pt-BR')}
                     </p>
                   </div>
                   <span className={`text-sm font-bold ${t.amount > 0 ? 'text-green-500' : 'text-red-500'}`}>
