@@ -2,48 +2,19 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Download, Loader2, Gamepad2, ExternalLink } from 'lucide-react';
 
+import type { DownloadableGame } from './downloads/types';
 import { dispatchOfflineDownload } from './downloads/services/downloadDispatcher';
-
-interface GameConfig {
-  type?: string;
-  backgroundImageUrl?: string;
-  primaryColor?: string;
-  outerRimColor?: string;
-  ledColor?: string;
-  logoUrl?: string;
-  title?: string;
-  description?: string;
-  duration?: number;
-  difficulty?: string;
-  images?: string[];
-  items?: string[];
-  balloonLogoUrl?: string;
-  balloonCount?: number;
-  speed?: number;
-  activeColors?: string[];
-  questions?: Array<{
-    id?: string;
-    question: string;
-    options: string[];
-    correctIndex: number;
-  }>;
-  skipLeadGate?: boolean;
-  [key: string]: unknown;
-}
-
-interface Game {
-  id: string;
-  name: string;
-  type?: string;
-  status?: string;
-  user_id?: string;
-  created_at?: string;
-  config?: GameConfig;
-}
+import {
+  getGameType,
+  getGameTypeName,
+  isBalloonGame,
+  isMemoryGame,
+  isQuizGame,
+  isRouletteGame,
+} from './downloads/utils/gameType';
 
 export function DownloadsPage() {
-
-  const [games, setGames] = useState<Game[]>([]);
+  const [games, setGames] = useState<DownloadableGame[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -52,12 +23,14 @@ export function DownloadsPage() {
 
   const fetchActiveGames = async () => {
     try {
-
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (!user) return;
+      if (!user) {
+        setGames([]);
+        return;
+      }
 
       const { data, error } = await supabase
         .from('events')
@@ -68,51 +41,17 @@ export function DownloadsPage() {
 
       if (error) throw error;
 
-      setGames((data as Game[]) || []);
-
+      setGames(((data as DownloadableGame[]) || []).filter(Boolean));
     } catch (error) {
-
       console.error('Erro ao buscar jogos:', error);
-
+      setGames([]);
     } finally {
-
       setLoading(false);
-
     }
   };
 
-  const getGameTypeName = (game: Game) => {
-
-    const type = game.type || game.config?.type || 'quiz';
-
-    switch (type.toLowerCase()) {
-      case 'quiz':
-        return 'QUIZ';
-      case 'roulette':
-        return 'ROLETA';
-      case 'balloon':
-        return 'BALÃO';
-      case 'memory':
-        return 'MEMÓRIA';
-      default:
-        return 'JOGO';
-    }
-
-  };
-
-  const getGameType = (game: Game) => {
-    return (game.type || game.config?.type || 'quiz').toLowerCase();
-  };
-
-  const isQuizGame = (game: Game) => getGameType(game) === 'quiz';
-  const isRouletteGame = (game: Game) => getGameType(game) === 'roulette';
-  const isMemoryGame = (game: Game) => getGameType(game) === 'memory';
-  const isBalloonGame = (game: Game) => getGameType(game) === 'balloon';
-
-  const openQuizOfficeMode = (game: Game) => {
-
+  const openQuizOfficeMode = (game: DownloadableGame) => {
     try {
-
       const config = game.config || {};
 
       if (!config.questions || config.questions.length === 0) {
@@ -129,23 +68,15 @@ export function DownloadsPage() {
       localStorage.setItem('@quiz_office_config', JSON.stringify(officeConfig));
 
       const officeUrl = `${window.location.origin}/office/quiz`;
-
       window.open(officeUrl, '_blank', 'noopener,noreferrer');
-
     } catch (error) {
-
       console.error('Erro ao abrir modo office do quiz:', error);
-
       alert('Não foi possível abrir o modo office do quiz.');
-
     }
-
   };
 
-  const openRouletteOfficeMode = (game: Game) => {
-
+  const openRouletteOfficeMode = (game: DownloadableGame) => {
     try {
-
       const config = game.config || {};
 
       if (!config.items || config.items.length === 0) {
@@ -153,101 +84,82 @@ export function DownloadsPage() {
         return;
       }
 
+      if (!game.id) {
+        alert('Esta roleta não possui um identificador válido.');
+        return;
+      }
+
       const officeUrl = `${window.location.origin}/office/roulette/${game.id}`;
-
       window.open(officeUrl, '_blank', 'noopener,noreferrer');
-
     } catch (error) {
-
       console.error('Erro ao abrir modo office da roleta:', error);
-
       alert('Não foi possível abrir o modo office da roleta.');
+    }
+  };
 
+  const openMemoryOfficeMode = (game: DownloadableGame) => {
+    if (!game.id) {
+      alert('Este jogo não possui um identificador válido.');
+      return;
     }
 
-  };
-
-  const openMemoryOfficeMode = (game: Game) => {
-
     const officeUrl = `${window.location.origin}/office/memory/${game.id}`;
-
     window.open(officeUrl, '_blank', 'noopener,noreferrer');
-
   };
 
-  const openBalloonOfficeMode = (game: Game) => {
+  const openBalloonOfficeMode = (game: DownloadableGame) => {
+    if (!game.id) {
+      alert('Este jogo não possui um identificador válido.');
+      return;
+    }
 
     const officeUrl = `${window.location.origin}/office/balloon/${game.id}`;
-
     window.open(officeUrl, '_blank', 'noopener,noreferrer');
-
   };
 
-  const handleDownload = (game: Game) => {
-
+  const handleDownload = (game: DownloadableGame) => {
     const type = getGameType(game);
-
     dispatchOfflineDownload(type, game);
-
   };
 
   if (loading) {
-
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="animate-spin text-purple-600" />
       </div>
     );
-
   }
 
   return (
-
     <div className="max-w-5xl mx-auto space-y-8 animate-fade-in font-sans pb-20">
-
       <div>
-
-        <h1 className="text-2xl font-bold text-slate-800">
-          Downloads Offline
-        </h1>
+        <h1 className="text-2xl font-bold text-slate-800">Downloads Offline</h1>
 
         <p className="text-slate-500">
           Versões otimizadas para Totems e Telas Gigantes.
         </p>
-
       </div>
 
       <div className="space-y-4">
-
         {games.length === 0 ? (
-
           <div className="text-center py-16 bg-white rounded-3xl border border-slate-100">
             <p className="text-slate-400">Nenhum jogo ativo.</p>
           </div>
-
         ) : (
-
-          games.map((game) => (
-
+          games.map((game, index) => (
             <div
-              key={game.id}
+              key={game.id || `${game.name}-${index}`}
               className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col md:flex-row justify-between items-center gap-6"
             >
-
               <div className="flex items-center gap-4 flex-1">
-
                 <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center shrink-0">
                   <Download size={24} />
                 </div>
 
                 <div>
-
-                  <h3 className="text-lg font-bold text-slate-800">
-                    {game.name}
-                  </h3>
+                  <h3 className="text-lg font-bold text-slate-800">{game.name}</h3>
 
                   <div className="flex gap-2 mt-1 flex-wrap">
-
                     <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded uppercase">
                       Ativo
                     </span>
@@ -255,15 +167,11 @@ export function DownloadsPage() {
                     <span className="text-[10px] font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded uppercase flex items-center gap-1">
                       <Gamepad2 size={10} /> {getGameTypeName(game)}
                     </span>
-
                   </div>
-
                 </div>
-
               </div>
 
               <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
-
                 {isQuizGame(game) && (
                   <>
                     <button
@@ -335,19 +243,11 @@ export function DownloadsPage() {
                     </button>
                   </>
                 )}
-
               </div>
-
             </div>
-
           ))
-
         )}
-
       </div>
-
     </div>
-
   );
-
 }

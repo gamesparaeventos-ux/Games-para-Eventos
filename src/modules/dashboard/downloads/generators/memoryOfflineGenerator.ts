@@ -1,40 +1,48 @@
 import type { DownloadableGame } from '../types';
 
-export function generateMemoryOfflineHTML(game: DownloadableGame): string {
-  const config = {
-    ...(game.config || {}),
-    title: game.config?.title || game.name || 'Memória',
-    logoUrl: game.config?.logoUrl || '',
-    backgroundImageUrl: game.config?.backgroundImageUrl || '',
-    difficulty: game.config?.difficulty || 'easy',
-    images: Array.isArray(game.config?.images) ? game.config.images : [],
+type MemoryGeneratorConfig = {
+  title: string;
+  logoUrl: string;
+  backgroundImageUrl: string;
+  difficulty: string;
+  images: string[];
+};
+
+function escapeHtml(value: string): string {
+  return value.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function getPairsByDifficulty(difficulty?: string): number {
+  if (difficulty === 'hard') return 15;
+  if (difficulty === 'medium') return 10;
+  return 6;
+}
+
+function buildMemoryConfig(game: DownloadableGame): MemoryGeneratorConfig {
+  const rawConfig = game.config || {};
+
+  return {
+    ...rawConfig,
+    title: rawConfig.title || game.name || 'Memória',
+    logoUrl: rawConfig.logoUrl || '',
+    backgroundImageUrl: rawConfig.backgroundImageUrl || '',
+    difficulty: rawConfig.difficulty || 'easy',
+    images: Array.isArray(rawConfig.images) ? rawConfig.images : [],
   };
+}
 
-  const pairs =
-    config.difficulty === 'hard'
-      ? 15
-      : config.difficulty === 'medium'
-        ? 10
-        : 6;
-
+function serializeConfig(config: MemoryGeneratorConfig): string {
+  const pairs = getPairsByDifficulty(config.difficulty);
   const selectedImages = config.images.slice(0, pairs);
 
-  const safeConfig = JSON.stringify({
+  return JSON.stringify({
     ...config,
     images: selectedImages,
   }).replace(/</g, '\\u003c');
+}
 
-  const safeTitle = (game.name || 'memoria-offline')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-
-  return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>${safeTitle}</title>
-<style>
+function buildMemoryStyles(config: MemoryGeneratorConfig): string {
+  return `
   :root{
     --bg:#020617;
     --panel-border:rgba(255,255,255,0.10);
@@ -438,71 +446,12 @@ export function generateMemoryOfflineHTML(game: DownloadableGame): string {
       padding:8px;
     }
   }
-</style>
-</head>
-<body>
-<div class="overlay"></div>
+`;
+}
 
-<div class="app">
-  <div class="topbar">
-    <div class="brand">
-      ${
-        config.logoUrl
-          ? `<img src="${config.logoUrl}" alt="Logo" />`
-          : `<div class="brand-title">${config.title}</div>`
-      }
-    </div>
-
-    <div class="stats">
-      <div class="stat-pill">
-        <small>Tempo</small>
-        <strong id="time-value">0s</strong>
-      </div>
-      <div class="stat-pill">
-        <small>Jogadas</small>
-        <strong id="moves-value">0</strong>
-      </div>
-    </div>
-  </div>
-
-  <div id="intro-screen" class="screen">
-    <div class="intro-box">
-      ${
-        config.logoUrl
-          ? `<img src="${config.logoUrl}" class="logo" alt="Logo" />`
-          : `<div class="icon-circle">👻</div>`
-      }
-      <h1 class="title">Jogo da Memória</h1>
-      <p class="subtitle">Encontre todos os ${pairs} pares no modo offline.</p>
-      <button class="primary-btn" onclick="startGame()">JOGAR AGORA</button>
-    </div>
-  </div>
-
-  <div id="game-screen" class="board-screen hidden">
-    <div class="board-wrap">
-      <div id="board" class="board"></div>
-    </div>
-  </div>
-
-  <div id="result-screen" class="result-screen hidden">
-    <div class="result-box">
-      <div class="trophy">🏆</div>
-      <h2 class="result-title">Parabéns!</h2>
-      <p id="result-stats" class="result-text"></p>
-      <button class="primary-btn" onclick="restartGame()">JOGAR NOVAMENTE</button>
-    </div>
-  </div>
-
-  <div id="empty-screen" class="screen hidden">
-    <div class="warning-box">
-      <h2>Imagens insuficientes</h2>
-      <p>Este jogo da memória não possui imagens suficientes para a dificuldade configurada.</p>
-    </div>
-  </div>
-</div>
-
-<script>
-  const config = ${safeConfig};
+function buildMemoryScript(serializedConfig: string): string {
+  return `
+  const config = ${serializedConfig};
 
   let cards = [];
   let flippedIndices = [];
@@ -736,6 +685,88 @@ export function generateMemoryOfflineHTML(game: DownloadableGame): string {
 
   updateHud();
   showScreen("intro-screen");
+`;
+}
+
+export function generateMemoryOfflineHTML(game: DownloadableGame): string {
+  const config = buildMemoryConfig(game);
+  const pairs = getPairsByDifficulty(config.difficulty);
+  const safeConfig = serializeConfig(config);
+  const safeTitle = escapeHtml(game.name || 'memoria-offline');
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>${safeTitle}</title>
+<style>
+${buildMemoryStyles(config)}
+</style>
+</head>
+<body>
+<div class="overlay"></div>
+
+<div class="app">
+  <div class="topbar">
+    <div class="brand">
+      ${
+        config.logoUrl
+          ? `<img src="${config.logoUrl}" alt="Logo" />`
+          : `<div class="brand-title">${config.title}</div>`
+      }
+    </div>
+
+    <div class="stats">
+      <div class="stat-pill">
+        <small>Tempo</small>
+        <strong id="time-value">0s</strong>
+      </div>
+      <div class="stat-pill">
+        <small>Jogadas</small>
+        <strong id="moves-value">0</strong>
+      </div>
+    </div>
+  </div>
+
+  <div id="intro-screen" class="screen">
+    <div class="intro-box">
+      ${
+        config.logoUrl
+          ? `<img src="${config.logoUrl}" class="logo" alt="Logo" />`
+          : `<div class="icon-circle">👻</div>`
+      }
+      <h1 class="title">Jogo da Memória</h1>
+      <p class="subtitle">Encontre todos os ${pairs} pares no modo offline.</p>
+      <button class="primary-btn" onclick="startGame()">JOGAR AGORA</button>
+    </div>
+  </div>
+
+  <div id="game-screen" class="board-screen hidden">
+    <div class="board-wrap">
+      <div id="board" class="board"></div>
+    </div>
+  </div>
+
+  <div id="result-screen" class="result-screen hidden">
+    <div class="result-box">
+      <div class="trophy">🏆</div>
+      <h2 class="result-title">Parabéns!</h2>
+      <p id="result-stats" class="result-text"></p>
+      <button class="primary-btn" onclick="restartGame()">JOGAR NOVAMENTE</button>
+    </div>
+  </div>
+
+  <div id="empty-screen" class="screen hidden">
+    <div class="warning-box">
+      <h2>Imagens insuficientes</h2>
+      <p>Este jogo da memória não possui imagens suficientes para a dificuldade configurada.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+${buildMemoryScript(safeConfig)}
 </script>
 </body>
 </html>`;

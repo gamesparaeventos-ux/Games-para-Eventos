@@ -1,9 +1,27 @@
 import type { DownloadableGame } from '../types';
 
-export function generateBalloonOfflineHTML(game: DownloadableGame): string {
-  const config = game.config || {};
+type BalloonColor = {
+  id: string;
+  label: string;
+  hex: string;
+};
 
-  const defaultColors = [
+type BalloonGeneratorConfig = {
+  title: string;
+  duration: number;
+  speed: number;
+  balloonCount: number;
+  balloonLogoUrl: string;
+  backgroundImageUrl: string;
+  colors: BalloonColor[];
+};
+
+function escapeHtml(value: string): string {
+  return value.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function getDefaultColors(): BalloonColor[] {
+  return [
     { id: 'red', label: 'VERMELHO', hex: '#ef4444' },
     { id: 'blue', label: 'AZUL', hex: '#3b82f6' },
     { id: 'green', label: 'VERDE', hex: '#22c55e' },
@@ -11,35 +29,47 @@ export function generateBalloonOfflineHTML(game: DownloadableGame): string {
     { id: 'purple', label: 'ROXO', hex: '#a855f7' },
     { id: 'pink', label: 'ROSA', hex: '#ec4899' },
   ];
+}
 
-  const activeHexes = Array.isArray(config.activeColors)
-    ? config.activeColors
-    : defaultColors.map((c) => c.hex);
+function resolveBalloonColors(activeColors: unknown): BalloonColor[] {
+  const defaultColors = getDefaultColors();
 
-  const filteredColors = defaultColors.filter((c) => activeHexes.includes(c.hex));
-  const colorsToUse = filteredColors.length > 0 ? filteredColors : defaultColors;
+  const activeHexes = Array.isArray(activeColors)
+    ? activeColors
+    : defaultColors.map((color) => color.hex);
 
-  const safeConfig = JSON.stringify({
-    title: config.title || game.name || 'Estoura Balão',
-    duration: typeof config.duration === 'number' ? config.duration : 60,
-    speed: typeof config.speed === 'number' ? config.speed : 2,
-    balloonCount: typeof config.balloonCount === 'number' ? config.balloonCount : 5,
-    balloonLogoUrl: typeof config.balloonLogoUrl === 'string' ? config.balloonLogoUrl : '',
-    backgroundImageUrl: typeof config.backgroundImageUrl === 'string' ? config.backgroundImageUrl : '',
-    colors: colorsToUse,
-  }).replace(/</g, '\\u003c');
+  const filteredColors = defaultColors.filter((color) =>
+    activeHexes.includes(color.hex),
+  );
 
-  const safeTitle = (game.name || 'balao-offline')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  return filteredColors.length > 0 ? filteredColors : defaultColors;
+}
 
-  return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>${safeTitle}</title>
-<style>
+function buildBalloonConfig(game: DownloadableGame): BalloonGeneratorConfig {
+  const rawConfig = game.config || {};
+
+  return {
+    title: rawConfig.title || game.name || 'Estoura Balão',
+    duration: typeof rawConfig.duration === 'number' ? rawConfig.duration : 60,
+    speed: typeof rawConfig.speed === 'number' ? rawConfig.speed : 2,
+    balloonCount:
+      typeof rawConfig.balloonCount === 'number' ? rawConfig.balloonCount : 5,
+    balloonLogoUrl:
+      typeof rawConfig.balloonLogoUrl === 'string' ? rawConfig.balloonLogoUrl : '',
+    backgroundImageUrl:
+      typeof rawConfig.backgroundImageUrl === 'string'
+        ? rawConfig.backgroundImageUrl
+        : '',
+    colors: resolveBalloonColors(rawConfig.activeColors),
+  };
+}
+
+function serializeConfig(config: BalloonGeneratorConfig): string {
+  return JSON.stringify(config).replace(/</g, '\\u003c');
+}
+
+function buildBalloonStyles(config: BalloonGeneratorConfig): string {
+  return `
   :root{
     --bg1:#6366f1;
     --bg2:#a855f7;
@@ -284,53 +314,12 @@ export function generateBalloonOfflineHTML(game: DownloadableGame): string {
     color:#9333ea;
     margin:12px 0 20px 0;
   }
-</style>
-</head>
-<body>
-<div class="overlay"></div>
+`;
+}
 
-<div class="app">
-  <div id="intro-screen" class="screen">
-    <div class="intro-card">
-      <h1 class="title">${config.title || 'ESTOURA BALÃO'}</h1>
-      <p class="subtitle">Estoure apenas a cor correta no modo offline.</p>
-      <button class="primary-btn" onclick="startGame()">INICIAR</button>
-    </div>
-  </div>
-
-  <div id="game-screen" class="hidden">
-    <div class="hud">
-      <div style="width:120px;"></div>
-
-      <div class="target-box">
-        <div class="target-label">Estoure o:</div>
-        <div class="target-pill">
-          <div id="target-dot" class="target-dot"></div>
-          <div id="target-text" class="target-text"></div>
-        </div>
-      </div>
-
-      <div class="score-box">
-        <div><span id="score-value" class="score-value">0</span> <span style="font-size:12px;font-weight:800;opacity:.8;">pts</span></div>
-        <div id="time-pill" class="time-pill">60s</div>
-      </div>
-    </div>
-
-    <div id="game-area" class="game-area"></div>
-  </div>
-
-  <div id="result-screen" class="screen hidden">
-    <div class="result-box">
-      <div class="trophy">🏆</div>
-      <h2 class="result-title">FIM DE JOGO!</h2>
-      <div id="final-score" class="result-score">0</div>
-      <button class="primary-btn" onclick="restartGame()">JOGAR NOVAMENTE</button>
-    </div>
-  </div>
-</div>
-
-<script>
-  const config = ${safeConfig};
+function buildBalloonScript(serializedConfig: string): string {
+  return `
+  const config = ${serializedConfig};
 
   let gameState = "idle";
   let score = 0;
@@ -361,9 +350,10 @@ export function generateBalloonOfflineHTML(game: DownloadableGame): string {
   }
 
   function getRandomColor() {
-    const colors = Array.isArray(config.colors) && config.colors.length ? config.colors : [
-      { id: 'red', label: 'VERMELHO', hex: '#ef4444' }
-    ];
+    const colors = Array.isArray(config.colors) && config.colors.length
+      ? config.colors
+      : [{ id: 'red', label: 'VERMELHO', hex: '#ef4444' }];
+
     return colors[Math.floor(Math.random() * colors.length)];
   }
 
@@ -374,11 +364,14 @@ export function generateBalloonOfflineHTML(game: DownloadableGame): string {
 
   function removeBalloon(id) {
     const index = balloons.findIndex((b) => b.id === id);
+
     if (index !== -1) {
       const balloon = balloons[index];
+
       if (balloon.el && balloon.el.parentNode) {
         balloon.el.parentNode.removeChild(balloon.el);
       }
+
       balloons.splice(index, 1);
     }
   }
@@ -409,6 +402,10 @@ export function generateBalloonOfflineHTML(game: DownloadableGame): string {
     el.style.bottom = "-120px";
     el.dataset.id = String(data.id);
 
+    const logoHtml = config.balloonLogoUrl
+      ? '<div class="balloon-logo"><img src="' + config.balloonLogoUrl + '" alt=""></div>'
+      : '';
+
     el.innerHTML = \`
       <svg viewBox="0 0 100 125" aria-hidden="true">
         <path d="M50 100 Q 50 130 60 145" stroke="rgba(255,255,255,0.45)" stroke-width="2" fill="none"></path>
@@ -416,11 +413,7 @@ export function generateBalloonOfflineHTML(game: DownloadableGame): string {
         <ellipse cx="30" cy="30" rx="10" ry="18" fill="white" fill-opacity="0.2" transform="rotate(-30 30 30)"></ellipse>
         <path d="M45 103 L55 103 L52 110 L48 110 Z" fill="\${data.color.hex}"></path>
       </svg>
-      ${
-        config.balloonLogoUrl
-          ? '<div class="balloon-logo"><img src="' + config.balloonLogoUrl + '" alt=""></div>'
-          : ''
-      }
+      \${logoHtml}
     \`;
 
     el.addEventListener("pointerdown", () => popBalloon(data.id, data.color.id));
@@ -444,7 +437,7 @@ export function generateBalloonOfflineHTML(game: DownloadableGame): string {
       speed: riseSpeed,
       bottom: -120,
       el: null,
-      driftSeed: Math.random() * 1000
+      driftSeed: Math.random() * 1000,
     };
 
     balloon.el = createBalloonElement(balloon);
@@ -538,6 +531,69 @@ export function generateBalloonOfflineHTML(game: DownloadableGame): string {
   function restartGame() {
     startGame();
   }
+`;
+}
+
+export function generateBalloonOfflineHTML(game: DownloadableGame): string {
+  const config = buildBalloonConfig(game);
+  const safeConfig = serializeConfig(config);
+  const safeTitle = escapeHtml(game.name || 'balao-offline');
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>${safeTitle}</title>
+<style>
+${buildBalloonStyles(config)}
+</style>
+</head>
+<body>
+<div class="overlay"></div>
+
+<div class="app">
+  <div id="intro-screen" class="screen">
+    <div class="intro-card">
+      <h1 class="title">${config.title || 'ESTOURA BALÃO'}</h1>
+      <p class="subtitle">Estoure apenas a cor correta no modo offline.</p>
+      <button class="primary-btn" onclick="startGame()">INICIAR</button>
+    </div>
+  </div>
+
+  <div id="game-screen" class="hidden">
+    <div class="hud">
+      <div style="width:120px;"></div>
+
+      <div class="target-box">
+        <div class="target-label">Estoure o:</div>
+        <div class="target-pill">
+          <div id="target-dot" class="target-dot"></div>
+          <div id="target-text" class="target-text"></div>
+        </div>
+      </div>
+
+      <div class="score-box">
+        <div><span id="score-value" class="score-value">0</span> <span style="font-size:12px;font-weight:800;opacity:.8;">pts</span></div>
+        <div id="time-pill" class="time-pill">60s</div>
+      </div>
+    </div>
+
+    <div id="game-area" class="game-area"></div>
+  </div>
+
+  <div id="result-screen" class="screen hidden">
+    <div class="result-box">
+      <div class="trophy">🏆</div>
+      <h2 class="result-title">FIM DE JOGO!</h2>
+      <div id="final-score" class="result-score">0</div>
+      <button class="primary-btn" onclick="restartGame()">JOGAR NOVAMENTE</button>
+    </div>
+  </div>
+</div>
+
+<script>
+${buildBalloonScript(safeConfig)}
 </script>
 </body>
 </html>`;

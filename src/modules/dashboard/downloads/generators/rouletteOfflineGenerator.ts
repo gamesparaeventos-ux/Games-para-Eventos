@@ -1,28 +1,45 @@
 import type { DownloadableGame } from '../types';
 
-export function generateRouletteOfflineHTML(game: DownloadableGame): string {
-  const config = {
-    ...(game.config || {}),
-    title: game.config?.title || game.name || 'Roleta',
+type RouletteGeneratorConfig = {
+  title: string;
+  description?: string;
+  logoUrl?: string;
+  backgroundImageUrl?: string;
+  outerRimColor: string;
+  ledColor: string;
+  skipLeadGate: boolean;
+  items: string[];
+};
+
+function escapeHtml(value: string): string {
+  return value.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function serializeConfig(config: RouletteGeneratorConfig): string {
+  return JSON.stringify(config).replace(/</g, '\\u003c');
+}
+
+function buildRouletteConfig(game: DownloadableGame): RouletteGeneratorConfig {
+  const rawConfig = game.config || {};
+
+  return {
+    ...rawConfig,
+    title: rawConfig.title || game.name || 'Roleta',
+    description: rawConfig.description,
+    logoUrl: rawConfig.logoUrl,
+    backgroundImageUrl: rawConfig.backgroundImageUrl,
     skipLeadGate: true,
-    items: Array.isArray(game.config?.items) ? game.config?.items : [],
-    outerRimColor: game.config?.outerRimColor || '#b45309',
-    ledColor: game.config?.ledColor || '#ffffff',
+    items: Array.isArray(rawConfig.items) ? rawConfig.items : [],
+    outerRimColor: rawConfig.outerRimColor || '#b45309',
+    ledColor: rawConfig.ledColor || '#ffffff',
   };
+}
 
-  const safeConfig = JSON.stringify(config).replace(/</g, '\\u003c');
-  const safeTitle = (game.name || 'roleta-offline').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-  return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>${safeTitle}</title>
-  <style>
+function buildRouletteStyles(config: RouletteGeneratorConfig): string {
+  return `
     :root {
-      --rim: ${config.outerRimColor || '#b45309'};
-      --led: ${config.ledColor || '#ffffff'};
+      --rim: ${config.outerRimColor};
+      --led: ${config.ledColor};
       --bg-dark: #0f172a;
     }
 
@@ -358,6 +375,179 @@ export function generateRouletteOfflineHTML(game: DownloadableGame): string {
       word-break: break-word;
       margin: 0;
     }
+`;
+}
+
+function buildRouletteScript(serializedConfig: string): string {
+  return `
+    const config = ${serializedConfig};
+    const palette = ['#F43F5E', '#3B82F6', '#22C55E', '#EAB308', '#A855F7', '#F97316', '#06B6D4', '#EC4899'];
+
+    let gameState = 'idle';
+    let rotation = 0;
+    let prize = '';
+
+    function getCoordinatesForPercent(percent) {
+      const x = Math.cos(2 * Math.PI * percent);
+      const y = Math.sin(2 * Math.PI * percent);
+      return [x, y];
+    }
+
+    function buildWheel() {
+      const items = Array.isArray(config.items) ? config.items : [];
+      const svg = document.getElementById('wheel-svg');
+      const ledLayer = document.getElementById('led-layer');
+
+      svg.innerHTML = '';
+      ledLayer.innerHTML = '';
+
+      const slices = items.length;
+
+      for (let i = 0; i < 16; i++) {
+        const led = document.createElement('div');
+        led.className = 'led';
+        led.style.transform =
+          'translate(-50%, -50%) rotate(' +
+          (i * (360 / 16)) +
+          'deg) translateY(-42vmin)';
+        led.style.animationDelay = (i * 0.1) + 's';
+        ledLayer.appendChild(led);
+      }
+
+      items.forEach((item, i) => {
+        const startPercent = i / slices;
+        const endPercent = (i + 1) / slices;
+        const start = getCoordinatesForPercent(endPercent);
+        const end = getCoordinatesForPercent(startPercent);
+        const largeArcFlag = (1 / slices) > 0.5 ? 1 : 0;
+        const pathData = [
+          'M 0 0',
+          'L ' + start[0] + ' ' + start[1],
+          'A 1 1 0 ' + largeArcFlag + ' 0 ' + end[0] + ' ' + end[1],
+          'L 0 0'
+        ].join(' ');
+
+        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', pathData);
+        path.setAttribute('fill', palette[i % palette.length]);
+        path.setAttribute('stroke', 'rgba(255,255,255,0.2)');
+        path.setAttribute('stroke-width', '0.005');
+        group.appendChild(path);
+
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        const rotateTextAngle = (i * 360 / slices) + (360 / slices / 2);
+        text.setAttribute('x', '0.82');
+        text.setAttribute('y', '0');
+        text.setAttribute('fill', 'white');
+        text.setAttribute('font-size', '0.075');
+        text.setAttribute('font-weight', '900');
+        text.setAttribute('text-anchor', 'end');
+        text.setAttribute('dominant-baseline', 'middle');
+        text.setAttribute('transform', 'rotate(' + rotateTextAngle + ')');
+        text.setAttribute(
+          'style',
+          'text-transform: uppercase; filter: drop-shadow(0px 1px 2px rgba(0,0,0,0.5));'
+        );
+        text.textContent = item.length > 15 ? item.substring(0, 13) + '..' : item;
+        group.appendChild(text);
+
+        svg.appendChild(group);
+      });
+    }
+
+    function startGame() {
+      const items = Array.isArray(config.items) ? config.items : [];
+
+      if (!items.length) {
+        alert('Esta roleta está sem itens configurados.');
+        return;
+      }
+
+      document.getElementById('start').classList.add('hidden');
+      document.getElementById('result').classList.add('hidden');
+      document.getElementById('game').classList.remove('hidden');
+
+      gameState = 'idle';
+      prize = '';
+      buildWheel();
+      updateSpinButton();
+    }
+
+    function updateSpinButton() {
+      const spinBtn = document.getElementById('spin-btn');
+      const spinContent = document.getElementById('spin-content');
+
+      if (gameState === 'spinning') {
+        spinBtn.disabled = true;
+        spinContent.innerHTML = '<div class="spinner"></div>';
+      } else {
+        spinBtn.disabled = false;
+        spinContent.innerHTML =
+          '<div class="center-icon">🎯</div><div class="center-label">GIRAR</div>';
+      }
+    }
+
+    function spinWheel() {
+      if (gameState !== 'idle') return;
+
+      const items = Array.isArray(config.items) ? config.items : [];
+      if (!items.length) return;
+
+      gameState = 'spinning';
+      updateSpinButton();
+
+      const slices = items.length;
+      const sliceDeg = 360 / slices;
+      const winningIndex = Math.floor(Math.random() * slices);
+      const extraSpins = 360 * 8;
+      const targetRotation =
+        extraSpins + (360 - (winningIndex * sliceDeg)) - (sliceDeg / 2);
+      const jitter = (Math.random() * sliceDeg * 0.7) - (sliceDeg * 0.35);
+
+      rotation = rotation + targetRotation + jitter;
+
+      const wheel = document.getElementById('wheel');
+      wheel.style.transform = 'rotate(' + rotation + 'deg)';
+
+      setTimeout(() => {
+        prize = items[winningIndex];
+        gameState = 'result';
+        showResult();
+      }, 6000);
+    }
+
+    function showResult() {
+      document.getElementById('game').classList.add('hidden');
+      document.getElementById('result').classList.remove('hidden');
+      document.getElementById('result-prize').innerText = prize;
+      updateSpinButton();
+    }
+
+    function restartGame() {
+      gameState = 'idle';
+      prize = '';
+      document.getElementById('result').classList.add('hidden');
+      document.getElementById('game').classList.remove('hidden');
+      updateSpinButton();
+    }
+`;
+}
+
+export function generateRouletteOfflineHTML(game: DownloadableGame): string {
+  const config = buildRouletteConfig(game);
+  const safeConfig = serializeConfig(config);
+  const safeTitle = escapeHtml(game.name || 'roleta-offline');
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>${safeTitle}</title>
+  <style>
+${buildRouletteStyles(config)}
   </style>
 </head>
 <body>
@@ -420,149 +610,7 @@ export function generateRouletteOfflineHTML(game: DownloadableGame): string {
   </div>
 
   <script>
-    const config = ${safeConfig};
-    const palette = ['#F43F5E', '#3B82F6', '#22C55E', '#EAB308', '#A855F7', '#F97316', '#06B6D4', '#EC4899'];
-
-    let gameState = 'idle';
-    let rotation = 0;
-    let prize = '';
-
-    function getCoordinatesForPercent(percent) {
-      const x = Math.cos(2 * Math.PI * percent);
-      const y = Math.sin(2 * Math.PI * percent);
-      return [x, y];
-    }
-
-    function buildWheel() {
-      const items = Array.isArray(config.items) ? config.items : [];
-      const svg = document.getElementById('wheel-svg');
-      const ledLayer = document.getElementById('led-layer');
-
-      svg.innerHTML = '';
-      ledLayer.innerHTML = '';
-
-      const slices = items.length;
-
-      for (let i = 0; i < 16; i++) {
-        const led = document.createElement('div');
-        led.className = 'led';
-        led.style.transform = 'translate(-50%, -50%) rotate(' + (i * (360 / 16)) + 'deg) translateY(-42vmin)';
-        led.style.animationDelay = (i * 0.1) + 's';
-        ledLayer.appendChild(led);
-      }
-
-      items.forEach((item, i) => {
-        const startPercent = i / slices;
-        const endPercent = (i + 1) / slices;
-        const start = getCoordinatesForPercent(endPercent);
-        const end = getCoordinatesForPercent(startPercent);
-        const largeArcFlag = (1 / slices) > 0.5 ? 1 : 0;
-        const pathData = [
-          'M 0 0',
-          'L ' + start[0] + ' ' + start[1],
-          'A 1 1 0 ' + largeArcFlag + ' 0 ' + end[0] + ' ' + end[1],
-          'L 0 0'
-        ].join(' ');
-
-        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', pathData);
-        path.setAttribute('fill', palette[i % palette.length]);
-        path.setAttribute('stroke', 'rgba(255,255,255,0.2)');
-        path.setAttribute('stroke-width', '0.005');
-        group.appendChild(path);
-
-        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        const rotateTextAngle = (i * 360 / slices) + (360 / slices / 2);
-        text.setAttribute('x', '0.82');
-        text.setAttribute('y', '0');
-        text.setAttribute('fill', 'white');
-        text.setAttribute('font-size', '0.075');
-        text.setAttribute('font-weight', '900');
-        text.setAttribute('text-anchor', 'end');
-        text.setAttribute('dominant-baseline', 'middle');
-        text.setAttribute('transform', 'rotate(' + rotateTextAngle + ')');
-        text.setAttribute('style', 'text-transform: uppercase; filter: drop-shadow(0px 1px 2px rgba(0,0,0,0.5));');
-        text.textContent = item.length > 15 ? item.substring(0, 13) + '..' : item;
-        group.appendChild(text);
-
-        svg.appendChild(group);
-      });
-    }
-
-    function startGame() {
-      const items = Array.isArray(config.items) ? config.items : [];
-      if (!items.length) {
-        alert('Esta roleta está sem itens configurados.');
-        return;
-      }
-
-      document.getElementById('start').classList.add('hidden');
-      document.getElementById('result').classList.add('hidden');
-      document.getElementById('game').classList.remove('hidden');
-
-      gameState = 'idle';
-      prize = '';
-      buildWheel();
-      updateSpinButton();
-    }
-
-    function updateSpinButton() {
-      const spinBtn = document.getElementById('spin-btn');
-      const spinContent = document.getElementById('spin-content');
-
-      if (gameState === 'spinning') {
-        spinBtn.disabled = true;
-        spinContent.innerHTML = '<div class="spinner"></div>';
-      } else {
-        spinBtn.disabled = false;
-        spinContent.innerHTML = '<div class="center-icon">🎯</div><div class="center-label">GIRAR</div>';
-      }
-    }
-
-    function spinWheel() {
-      if (gameState !== 'idle') return;
-
-      const items = Array.isArray(config.items) ? config.items : [];
-      if (!items.length) return;
-
-      gameState = 'spinning';
-      updateSpinButton();
-
-      const slices = items.length;
-      const sliceDeg = 360 / slices;
-      const winningIndex = Math.floor(Math.random() * slices);
-      const extraSpins = 360 * 8;
-      const targetRotation = extraSpins + (360 - (winningIndex * sliceDeg)) - (sliceDeg / 2);
-      const jitter = (Math.random() * sliceDeg * 0.7) - (sliceDeg * 0.35);
-
-      rotation = rotation + targetRotation + jitter;
-
-      const wheel = document.getElementById('wheel');
-      wheel.style.transform = 'rotate(' + rotation + 'deg)';
-
-      setTimeout(() => {
-        prize = items[winningIndex];
-        gameState = 'result';
-        showResult();
-      }, 6000);
-    }
-
-    function showResult() {
-      document.getElementById('game').classList.add('hidden');
-      document.getElementById('result').classList.remove('hidden');
-      document.getElementById('result-prize').innerText = prize;
-      updateSpinButton();
-    }
-
-    function restartGame() {
-      gameState = 'idle';
-      prize = '';
-      document.getElementById('result').classList.add('hidden');
-      document.getElementById('game').classList.remove('hidden');
-      updateSpinButton();
-    }
+${buildRouletteScript(safeConfig)}
   </script>
 </body>
 </html>`;

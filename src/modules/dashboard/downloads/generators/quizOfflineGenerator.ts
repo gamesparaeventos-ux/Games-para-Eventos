@@ -1,49 +1,47 @@
-type QuizQuestion = {
-  id?: string;
-  question: string;
-  options: string[];
-  correctIndex: number;
+import type { DownloadableGame } from '../types';
+
+type QuizGeneratorConfig = {
+  title: string;
+  description: string;
+  primaryColor: string;
+  logoUrl: string;
+  backgroundImageUrl: string;
+  skipLeadGate: boolean;
+  questions: Array<{
+    id?: string;
+    question: string;
+    options: string[];
+    correctIndex: number;
+  }>;
 };
 
-type QuizGameConfig = {
-  title?: string;
-  description?: string;
-  primaryColor?: string;
-  logoUrl?: string;
-  backgroundImageUrl?: string;
-  questions?: QuizQuestion[];
-  [key: string]: unknown;
-};
+function escapeHtml(value: string): string {
+  return value.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
-type QuizDownloadGame = {
-  name: string;
-  config?: QuizGameConfig;
-};
+function serializeConfig(config: QuizGeneratorConfig): string {
+  return JSON.stringify(config).replace(/</g, '\\u003c');
+}
 
-export function generateQuizOfflineHTML(game: QuizDownloadGame): string {
-  const config = {
-    ...(game.config || {}),
-    title: game.config?.title || game.name || 'Quiz',
-    description: game.config?.description || 'Responda às perguntas e veja sua pontuação final.',
-    primaryColor: game.config?.primaryColor || '#8b5cf6',
-    logoUrl: game.config?.logoUrl || '',
-    backgroundImageUrl: game.config?.backgroundImageUrl || '',
+function buildQuizConfig(game: DownloadableGame): QuizGeneratorConfig {
+  const rawConfig = game.config || {};
+
+  return {
+    ...rawConfig,
+    title: rawConfig.title || game.name || 'Quiz',
+    description:
+      rawConfig.description ||
+      'Responda às perguntas e veja sua pontuação final.',
+    primaryColor: rawConfig.primaryColor || '#8b5cf6',
+    logoUrl: rawConfig.logoUrl || '',
+    backgroundImageUrl: rawConfig.backgroundImageUrl || '',
     skipLeadGate: true,
-    questions: Array.isArray(game.config?.questions) ? game.config.questions : [],
+    questions: Array.isArray(rawConfig.questions) ? rawConfig.questions : [],
   };
+}
 
-  const safeConfig = JSON.stringify(config).replace(/</g, '\\u003c');
-  const safeTitle = (game.name || 'quiz-offline')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-
-  return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>${safeTitle}</title>
-<style>
+function buildQuizStyles(config: QuizGeneratorConfig): string {
+  return `
   :root{
     --primary:${config.primaryColor};
     --bg:#1e1b4b;
@@ -325,60 +323,12 @@ export function generateQuizOfflineHTML(game: QuizDownloadGame): string {
     0%,100%{transform:scale(1)}
     50%{transform:scale(1.03)}
   }
-</style>
-</head>
-<body>
-<div class="bg-overlay"></div>
+`;
+}
 
-<div class="app">
-  <div id="topbar" class="topbar hidden">
-    <div id="score-pill" class="pill">🏆 0</div>
-    <div id="timer-pill" class="pill timer">⏱ 15s</div>
-  </div>
-
-  <div id="progress" class="progress hidden">
-    <div id="progress-bar" class="progress-bar"></div>
-  </div>
-
-  <div id="intro-screen" class="screen">
-    <div class="intro-card">
-      ${config.logoUrl ? `<img class="logo" src="${config.logoUrl}" alt="Logo" />` : ''}
-      <h1 class="title">${config.title}</h1>
-      <p class="subtitle">${config.description || 'Responda às perguntas e veja sua pontuação final.'}</p>
-      <button class="primary-btn" onclick="startGame()">INICIAR QUIZ</button>
-    </div>
-  </div>
-
-  <div id="game-screen" class="screen hidden">
-    <div class="game-wrap">
-      <div class="question-card">
-        <h2 id="question-text" class="question-text"></h2>
-      </div>
-      <div id="options" class="options"></div>
-    </div>
-  </div>
-
-  <div id="result-screen" class="screen hidden">
-    <div class="result-card">
-      <div style="font-size:64px;">🏆</div>
-      <h2 class="title" style="font-size:34px;">FIM DE JOGO!</h2>
-      <p class="result-text">Sua pontuação final foi:</p>
-      <div id="final-score" class="result-score">0</div>
-      <p id="final-summary" class="small"></p>
-      <button class="primary-btn" onclick="restartGame()">JOGAR NOVAMENTE</button>
-    </div>
-  </div>
-
-  <div id="empty-screen" class="screen hidden">
-    <div class="empty">
-      <h2 style="margin-top:0;">Configuração do Quiz inválida</h2>
-      <p>Este arquivo offline não possui perguntas válidas para iniciar o jogo.</p>
-    </div>
-  </div>
-</div>
-
-<script>
-  const config = ${safeConfig};
+function buildQuizScript(serializedConfig: string): string {
+  return `
+  const config = ${serializedConfig};
 
   let currentQuestionIndex = 0;
   let score = 0;
@@ -481,9 +431,14 @@ export function generateQuizOfflineHTML(game: QuizDownloadGame): string {
         }
       }
 
-      btn.innerHTML = '<div class="option-row"><span>' + optionText + '</span><span class="icon">' + icon + '</span></div>';
-      btn.onclick = () => handleOptionClick(idx);
+      btn.innerHTML =
+        '<div class="option-row"><span>' +
+        optionText +
+        '</span><span class="icon">' +
+        icon +
+        '</span></div>';
 
+      btn.onclick = () => handleOptionClick(idx);
       optionsEl.appendChild(btn);
     });
   }
@@ -565,6 +520,76 @@ export function generateQuizOfflineHTML(game: QuizDownloadGame): string {
 
   showScreen("intro-screen");
   toggleGameUi(false);
+`;
+}
+
+export function generateQuizOfflineHTML(game: DownloadableGame): string {
+  const config = buildQuizConfig(game);
+  const safeConfig = serializeConfig(config);
+  const safeTitle = escapeHtml(game.name || 'quiz-offline');
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>${safeTitle}</title>
+<style>
+${buildQuizStyles(config)}
+</style>
+</head>
+<body>
+<div class="bg-overlay"></div>
+
+<div class="app">
+  <div id="topbar" class="topbar hidden">
+    <div id="score-pill" class="pill">🏆 0</div>
+    <div id="timer-pill" class="pill timer">⏱ 15s</div>
+  </div>
+
+  <div id="progress" class="progress hidden">
+    <div id="progress-bar" class="progress-bar"></div>
+  </div>
+
+  <div id="intro-screen" class="screen">
+    <div class="intro-card">
+      ${config.logoUrl ? `<img class="logo" src="${config.logoUrl}" alt="Logo" />` : ''}
+      <h1 class="title">${config.title}</h1>
+      <p class="subtitle">${config.description}</p>
+      <button class="primary-btn" onclick="startGame()">INICIAR QUIZ</button>
+    </div>
+  </div>
+
+  <div id="game-screen" class="screen hidden">
+    <div class="game-wrap">
+      <div class="question-card">
+        <h2 id="question-text" class="question-text"></h2>
+      </div>
+      <div id="options" class="options"></div>
+    </div>
+  </div>
+
+  <div id="result-screen" class="screen hidden">
+    <div class="result-card">
+      <div style="font-size:64px;">🏆</div>
+      <h2 class="title" style="font-size:34px;">FIM DE JOGO!</h2>
+      <p class="result-text">Sua pontuação final foi:</p>
+      <div id="final-score" class="result-score">0</div>
+      <p id="final-summary" class="small"></p>
+      <button class="primary-btn" onclick="restartGame()">JOGAR NOVAMENTE</button>
+    </div>
+  </div>
+
+  <div id="empty-screen" class="screen hidden">
+    <div class="empty">
+      <h2 style="margin-top:0;">Configuração do Quiz inválida</h2>
+      <p>Este arquivo offline não possui perguntas válidas para iniciar o jogo.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+${buildQuizScript(safeConfig)}
 </script>
 </body>
 </html>`;

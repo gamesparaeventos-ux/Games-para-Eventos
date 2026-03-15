@@ -58,9 +58,18 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const mpAccessToken =
+      Deno.env.get("MERCADO_PAGO_ACCESS_TOKEN") || Deno.env.get("MP_ACCESS_TOKEN");
 
     if (!supabaseUrl || !serviceRoleKey) {
       return new Response(JSON.stringify({ error: "Supabase não configurado" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!mpAccessToken) {
+      return new Response(JSON.stringify({ error: "Token do Mercado Pago não configurado" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -72,31 +81,21 @@ serve(async (req) => {
     const packageId = body?.package_id;
 
     let value = 0;
+    let title = "Compra de crédito - Games para Eventos";
 
     if (packageId === "credits_1") {
       value = 0.5;
+      title = "1 crédito - Games para Eventos";
     } else if (body?.amount) {
       value = Number(body.amount);
     }
 
-    if (!Number.isFinite(value) || value < 0.5) {
+    if (!Number.isFinite(value) || value <= 0) {
       return new Response(JSON.stringify({ error: "Valor inválido" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const mpAccessToken =
-      Deno.env.get("MERCADO_PAGO_ACCESS_TOKEN") || Deno.env.get("MP_ACCESS_TOKEN");
-
-    if (!mpAccessToken) {
-      return new Response(JSON.stringify({ error: "Token do Mercado Pago não configurado" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const webhookUrl = `${supabaseUrl}/functions/v1/payment-webhook`;
 
     const { data: internalPayment, error: insertError } = await supabaseAdmin
       .from("payments")
@@ -105,7 +104,7 @@ serve(async (req) => {
         amount: value,
         status: "pending",
       })
-      .select("id, user_id, amount, status")
+      .select("id")
       .single();
 
     if (insertError || !internalPayment) {
@@ -117,40 +116,49 @@ serve(async (req) => {
     }
 
     const idempotencyKey = crypto.randomUUID();
+    const webhookUrl = `${supabaseUrl}/functions/v1/payment-webhook`;
 
-    const mpResponse = await fetch("https://api.mercadopago.com/v1/payments", {
+    const payload = {
+      items: [
+        {
+          id: packageId || "credits_1",
+          title,
+          quantity: 1,
+          currency_id: "BRL",
+          unit_price: value,
+        },
+      ],
+      payer: {
+        email: userEmail,
+      },
+      external_reference: String(internalPayment.id),
+      notification_url: webhookUrl,
+    };
+
+    console.log("Payload mp-create-preference:", JSON.stringify(payload));
+
+    const preferenceResponse = await fetch("https://api.mercadopago.com/checkout/preferences", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${mpAccessToken}`,
         "Content-Type": "application/json",
         "X-Idempotency-Key": idempotencyKey,
       },
-      body: JSON.stringify({
-        transaction_amount: value,
-        payment_method_id: "pix",
-        description: "Compra de 1 crédito - Games para Eventos",
-        external_reference: String(internalPayment.id),
-        notification_url: webhookUrl,
-        payer: {
-          email: userEmail,
-        },
-      }),
+      body: JSON.stringify(payload),
     });
 
-    const mpData = await mpResponse.json().catch(() => null);
+    const preferenceData = await preferenceResponse.json().catch(() => null);
 
-    if (!mpResponse.ok || !mpData?.id) {
-      await supabaseAdmin
-        .from("payments")
-        .update({ status: "error" })
-        .eq("id", internalPayment.id);
+    console.error("Resposta Mercado Pago mp-create-preference:", preferenceData);
 
-      console.error("Erro Mercado Pago create-pix-payment:", mpData);
-
+    if (!preferenceResponse.ok || !preferenceData?.id) {
       return new Response(
         JSON.stringify({
-          error: mpData?.message || mpData?.error || "Erro ao criar pagamento no Mercado Pago",
-          details: mpData,
+          error:
+            preferenceData?.message ||
+            preferenceData?.error ||
+            "Erro ao criar preferência no Mercado Pago",
+          details: preferenceData,
         }),
         {
           status: 400,
@@ -162,26 +170,20 @@ serve(async (req) => {
     const { error: updateError } = await supabaseAdmin
       .from("payments")
       .update({
-        mp_payment_id: String(mpData.id),
-        status: mpData.status || "pending",
+        mp_preference_id: String(preferenceData.id),
       })
       .eq("id", internalPayment.id);
 
     if (updateError) {
-      console.error("Erro ao atualizar pagamento interno:", updateError);
+      console.error("Erro ao salvar mp_preference_id:", updateError);
     }
-
-    const qrData = mpData?.point_of_interaction?.transaction_data;
 
     return new Response(
       JSON.stringify({
-        init_point: qrData?.ticket_url ?? null,
+        init_point: preferenceData.init_point,
+        sandbox_init_point: preferenceData.sandbox_init_point ?? null,
         payment_id: internalPayment.id,
-        mp_payment_id: String(mpData.id),
-        qr_code: qrData?.qr_code ?? null,
-        qr_code_base64: qrData?.qr_code_base64 ?? null,
-        ticket_url: qrData?.ticket_url ?? null,
-        status: mpData.status ?? "pending",
+        mp_preference_id: String(preferenceData.id),
       }),
       {
         status: 200,
@@ -190,7 +192,7 @@ serve(async (req) => {
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro interno";
-    console.error("Erro create-pix-payment:", msg);
+    console.error("Erro mp-create-preference:", msg);
 
     return new Response(JSON.stringify({ error: msg }), {
       status: 500,

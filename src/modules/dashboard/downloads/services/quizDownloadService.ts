@@ -1,26 +1,10 @@
-import { generateQuizOfflineHTML } from "../generators/quizOfflineGenerator";
-import { validateQuizDownload } from "../validators/quizDownloadValidator";
-import { downloadFile } from "./downloadFile";
-import { buildOfflineFileName } from "../utils/fileName";
+import type { DownloadableGame } from '../types';
+import { generateQuizOfflineHTML } from '../generators/quizOfflineGenerator';
+import { validateQuizDownload } from '../validators/quizDownloadValidator';
+import { downloadFile } from './downloadFile';
+import { buildOfflineFileName } from '../utils/fileName';
 
-type QuizQuestion = {
-  id?: string;
-  question: string;
-  options: string[];
-  correctIndex: number;
-};
-
-type QuizDownloadGame = {
-  name: string;
-  config?: {
-    title?: string;
-    primaryColor?: string;
-    questions?: QuizQuestion[];
-    [key: string]: unknown;
-  };
-};
-
-export function handleQuizOfflineDownload(game: QuizDownloadGame) {
+export function handleQuizOfflineDownload(game: DownloadableGame) {
   try {
     const validation = validateQuizDownload(game);
 
@@ -30,11 +14,11 @@ export function handleQuizOfflineDownload(game: QuizDownloadGame) {
     }
 
     const fileContent = generateQuizOfflineHTML(game);
-    const filename = buildOfflineFileName(game.name, "quiz-offline");
+    const filename = buildOfflineFileName(game.name, 'quiz-offline');
 
     downloadFile(filename, fileContent);
   } catch (error) {
-    console.error("Erro ao gerar quiz offline:", error);
-    alert("Não foi possível gerar o arquivo offline do quiz.");
+    console.error('Erro ao gerar quiz offline:', error);
+    alert('Não foi possível gerar o arquivo offline do quiz.');
   }
 }

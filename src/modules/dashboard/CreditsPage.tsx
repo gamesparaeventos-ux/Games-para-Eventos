@@ -13,6 +13,15 @@ interface Transaction {
   created_at: string;
 }
 
+interface PaymentRow {
+  id: string;
+  user_id: string;
+  amount: number | string;
+  status: string;
+  created_at: string;
+  approved_at: string | null;
+}
+
 export function CreditsPage() {
   const { effectiveUserId, impersonate } = useAdmin();
 
@@ -47,12 +56,40 @@ export function CreditsPage() {
         .eq('user_id', effectiveUserId)
         .order('created_at', { ascending: false });
 
+      const { data: paymentsData, error: paymentsError } = await supabase
+        .from('payments')
+        .select('id, user_id, amount, status, created_at, approved_at')
+        .eq('user_id', effectiveUserId)
+        .eq('status', 'approved')
+        .order('approved_at', { ascending: false });
+
       if (transError) {
         console.error('Erro ao carregar transações:', transError);
-        setTransactions([]);
-      } else {
-        setTransactions((transData as Transaction[]) || []);
       }
+
+      if (paymentsError) {
+        console.error('Erro ao carregar pagamentos:', paymentsError);
+      }
+
+      const creditTransactions = ((transData as Transaction[]) || []).map((t) => ({
+        ...t,
+        amount: Number(t.amount),
+      }));
+
+      const paymentTransactions: Transaction[] = ((paymentsData as PaymentRow[]) || []).map((p) => ({
+        id: `payment-${p.id}`,
+        user_id: p.user_id,
+        amount: 1,
+        type: 'purchase',
+        description: `Compra de crédito aprovada`,
+        created_at: p.approved_at || p.created_at,
+      }));
+
+      const mergedTransactions = [...creditTransactions, ...paymentTransactions].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+
+      setTransactions(mergedTransactions);
     } catch (error) {
       console.error('Erro ao carregar créditos:', error);
       setCredits(0);
