@@ -82,6 +82,12 @@ function buildRouletteStyles(config: RouletteGeneratorConfig): string {
       position: absolute;
       inset: 0;
       z-index: 2;
+    }
+
+    .hidden { display: none !important; }
+
+    .start-screen,
+    .result-screen {
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -89,8 +95,6 @@ function buildRouletteStyles(config: RouletteGeneratorConfig): string {
       padding: 5vh;
       text-align: center;
     }
-
-    .hidden { display: none; }
 
     .intro-card {
       width: 100%;
@@ -142,7 +146,9 @@ function buildRouletteStyles(config: RouletteGeneratorConfig): string {
 
     .title-wrap {
       position: absolute;
-      top: 5vh;
+      top: 3vh;
+      left: 50%;
+      transform: translateX(-50%);
       width: 100%;
       padding: 0 5vh;
       text-align: center;
@@ -167,10 +173,12 @@ function buildRouletteStyles(config: RouletteGeneratorConfig): string {
     }
 
     .roulette-stage {
-      position: relative;
+      position: absolute;
+      left: 50%;
+      top: 50%;
       width: 88vmin;
       height: 88vmin;
-      margin-top: 8vh;
+      transform: translate(-50%, -50%);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -178,7 +186,11 @@ function buildRouletteStyles(config: RouletteGeneratorConfig): string {
 
     .rim {
       position: absolute;
-      inset: 0;
+      top: 50%;
+      left: 50%;
+      width: 88vmin;
+      height: 88vmin;
+      transform: translate(-50%, -50%);
       border-radius: 50%;
       border: 2vmin solid var(--rim);
       background: #0f172a;
@@ -189,6 +201,7 @@ function buildRouletteStyles(config: RouletteGeneratorConfig): string {
       position: absolute;
       inset: 0;
       pointer-events: none;
+      z-index: 1;
     }
 
     .led {
@@ -237,9 +250,12 @@ function buildRouletteStyles(config: RouletteGeneratorConfig): string {
     }
 
     .wheel-wrap {
-      position: relative;
+      position: absolute;
+      top: 50%;
+      left: 50%;
       width: 80vmin;
       height: 80vmin;
+      transform: translate(-50%, -50%);
       z-index: 2;
       display: flex;
       align-items: center;
@@ -319,7 +335,9 @@ function buildRouletteStyles(config: RouletteGeneratorConfig): string {
       to { transform: rotate(360deg); }
     }
 
-    .result-screen { background: #0f172a; }
+    .result-screen {
+      background: #0f172a;
+    }
 
     .result-glow {
       position: absolute;
@@ -375,7 +393,7 @@ function buildRouletteStyles(config: RouletteGeneratorConfig): string {
       word-break: break-word;
       margin: 0;
     }
-`;
+  `;
 }
 
 function buildRouletteScript(serializedConfig: string): string {
@@ -398,10 +416,13 @@ function buildRouletteScript(serializedConfig: string): string {
       const svg = document.getElementById('wheel-svg');
       const ledLayer = document.getElementById('led-layer');
 
+      if (!svg || !ledLayer) return;
+
       svg.innerHTML = '';
       ledLayer.innerHTML = '';
 
       const slices = items.length;
+      if (!slices) return;
 
       for (let i = 0; i < 16; i++) {
         const led = document.createElement('div');
@@ -465,12 +486,22 @@ function buildRouletteScript(serializedConfig: string): string {
         return;
       }
 
-      document.getElementById('start').classList.add('hidden');
-      document.getElementById('result').classList.add('hidden');
-      document.getElementById('game').classList.remove('hidden');
+      const start = document.getElementById('start');
+      const game = document.getElementById('game');
+      const result = document.getElementById('result');
+      const wheel = document.getElementById('wheel');
+
+      if (!start || !game || !result || !wheel) return;
+
+      start.classList.add('hidden');
+      result.classList.add('hidden');
+      game.classList.remove('hidden');
 
       gameState = 'idle';
       prize = '';
+      rotation = 0;
+      wheel.style.transform = 'rotate(0deg)';
+
       buildWheel();
       updateSpinButton();
     }
@@ -478,6 +509,8 @@ function buildRouletteScript(serializedConfig: string): string {
     function updateSpinButton() {
       const spinBtn = document.getElementById('spin-btn');
       const spinContent = document.getElementById('spin-content');
+
+      if (!spinBtn || !spinContent) return;
 
       if (gameState === 'spinning') {
         spinBtn.disabled = true;
@@ -509,6 +542,8 @@ function buildRouletteScript(serializedConfig: string): string {
       rotation = rotation + targetRotation + jitter;
 
       const wheel = document.getElementById('wheel');
+      if (!wheel) return;
+
       wheel.style.transform = 'rotate(' + rotation + 'deg)';
 
       setTimeout(() => {
@@ -519,20 +554,47 @@ function buildRouletteScript(serializedConfig: string): string {
     }
 
     function showResult() {
-      document.getElementById('game').classList.add('hidden');
-      document.getElementById('result').classList.remove('hidden');
-      document.getElementById('result-prize').innerText = prize;
+      const game = document.getElementById('game');
+      const result = document.getElementById('result');
+      const prizeEl = document.getElementById('result-prize');
+
+      if (!game || !result || !prizeEl) return;
+
+      game.classList.add('hidden');
+      result.classList.remove('hidden');
+      prizeEl.innerText = prize;
       updateSpinButton();
     }
 
     function restartGame() {
+      const result = document.getElementById('result');
+      const game = document.getElementById('game');
+
+      if (!result || !game) return;
+
       gameState = 'idle';
       prize = '';
-      document.getElementById('result').classList.add('hidden');
-      document.getElementById('game').classList.remove('hidden');
+      result.classList.add('hidden');
+      game.classList.remove('hidden');
       updateSpinButton();
     }
-`;
+
+    window.startGame = startGame;
+    window.spinWheel = spinWheel;
+    window.restartGame = restartGame;
+
+    window.addEventListener('load', () => {
+      const start = document.getElementById('start');
+      const game = document.getElementById('game');
+      const result = document.getElementById('result');
+
+      if (!start || !game || !result) return;
+
+      result.classList.add('hidden');
+      game.classList.add('hidden');
+      start.classList.remove('hidden');
+    });
+  `;
 }
 
 export function generateRouletteOfflineHTML(game: DownloadableGame): string {
@@ -554,7 +616,7 @@ ${buildRouletteStyles(config)}
   <div class="bg"></div>
   <div class="overlay"></div>
 
-  <div id="start" class="screen">
+  <div id="start" class="screen start-screen">
     <div class="intro-card">
       ${config.logoUrl ? `<img src="${config.logoUrl}" class="intro-logo" alt="Logo" />` : ''}
       <h1 class="intro-title">${config.title || 'ROLETA'}</h1>

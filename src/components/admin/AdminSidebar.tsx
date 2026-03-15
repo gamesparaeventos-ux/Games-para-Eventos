@@ -19,7 +19,7 @@ const AdminSidebar = () => {
   };
 
   const menuItems = [
-    { icon: LayoutDashboard, label: "Dashboard", path: "/admin", roles: ["admin", "support", "finance"] },
+    { icon: LayoutDashboard, label: "Dashboard Financeiro", path: "/admin", roles: ["admin", "support", "finance"] },
     { icon: Users, label: "Clientes", path: "/admin/clients", roles: ["admin", "support", "finance"] },
     { icon: Calendar, label: "Eventos", path: "/admin/events", roles: ["admin", "support"] },
     { icon: Gamepad2, label: "Jogos", path: "/admin/games", roles: ["admin", "support"] },
@@ -27,7 +27,7 @@ const AdminSidebar = () => {
     { icon: UserCheck, label: "Leads", path: "/admin/leads", roles: ["admin", "support"] },
     { icon: CreditCard, label: "Pagamentos", path: "/admin/payments", roles: ["admin", "finance"] },
     { icon: RefreshCcw, label: "Reembolsos", path: "/admin/refunds", roles: ["admin", "finance"] },
-    { icon: Coins, label: "Créditos", path: "/admin/credits", roles: ["admin", "finance"] },
+    { icon: Coins, label: "Histórico de Créditos", path: "/admin/credits", roles: ["admin", "finance"] },
     { icon: BarChart3, label: "Relatórios", path: "/admin/reports", roles: ["admin", "finance"] },
     { icon: MessageSquare, label: "Suporte", path: "/admin/support", roles: ["admin", "support"] },
     { icon: CircleHelp, label: "Perguntas Frequentes", path: "/admin/faqs", roles: ["admin", "support"] },

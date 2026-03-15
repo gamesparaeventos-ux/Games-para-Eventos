@@ -19,6 +19,8 @@ interface EventRow {
   name: string;
 }
 
+type DateFilter = 'all' | 'today' | '7days' | '30days';
+
 export function LeadsPage() {
   const { effectiveUserId, impersonate } = useAdmin();
 
@@ -26,6 +28,8 @@ export function LeadsPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [userEvents, setUserEvents] = useState<EventRow[]>([]);
+  const [selectedEventId, setSelectedEventId] = useState('all');
+  const [selectedDateFilter, setSelectedDateFilter] = useState<DateFilter>('all');
 
   const fetchLeads = useCallback(async () => {
     setLoading(true);
@@ -81,15 +85,47 @@ export function LeadsPage() {
   }, [fetchLeads, impersonate.active, impersonate.targetUserId]);
 
   const filteredLeads = useMemo(() => {
-    const term = searchTerm.toLowerCase();
+    const term = searchTerm.toLowerCase().trim();
+    const now = new Date();
 
-    return leads.filter(
-      (lead) =>
+    return leads.filter((lead) => {
+      const matchesSearch =
+        !term ||
         lead.name?.toLowerCase().includes(term) ||
         lead.email?.toLowerCase().includes(term) ||
-        lead.whatsapp?.toLowerCase().includes(term)
-    );
-  }, [leads, searchTerm]);
+        lead.whatsapp?.toLowerCase().includes(term);
+
+      const matchesEvent =
+        selectedEventId === 'all' || lead.event_id === selectedEventId;
+
+      let matchesDate = true;
+
+      if (selectedDateFilter !== 'all') {
+        const leadDate = new Date(lead.created_at);
+
+        if (selectedDateFilter === 'today') {
+          matchesDate =
+            leadDate.getDate() === now.getDate() &&
+            leadDate.getMonth() === now.getMonth() &&
+            leadDate.getFullYear() === now.getFullYear();
+        }
+
+        if (selectedDateFilter === '7days') {
+          const sevenDaysAgo = new Date();
+          sevenDaysAgo.setDate(now.getDate() - 7);
+          matchesDate = leadDate >= sevenDaysAgo;
+        }
+
+        if (selectedDateFilter === '30days') {
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(now.getDate() - 30);
+          matchesDate = leadDate >= thirtyDaysAgo;
+        }
+      }
+
+      return matchesSearch && matchesEvent && matchesDate;
+    });
+  }, [leads, searchTerm, selectedEventId, selectedDateFilter]);
 
   const exportCSV = () => {
     const headers = ['Nome,Email,Whatsapp,Score,Evento,Data'];
@@ -160,7 +196,7 @@ export function LeadsPage() {
         </div>
       </div>
 
-      <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex flex-col md:flex-row gap-4">
+      <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex flex-col xl:flex-row gap-4">
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
           <input
@@ -172,12 +208,28 @@ export function LeadsPage() {
           />
         </div>
 
-        <select className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-600 outline-none focus:border-purple-500">
-          <option>Todos os eventos</option>
+        <select
+          value={selectedEventId}
+          onChange={(e) => setSelectedEventId(e.target.value)}
+          className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-600 outline-none focus:border-purple-500 min-w-[220px]"
+        >
+          <option value="all">Todos os eventos</option>
+          {userEvents.map((event) => (
+            <option key={event.id} value={event.id}>
+              {event.name}
+            </option>
+          ))}
         </select>
 
-        <select className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-600 outline-none focus:border-purple-500">
-          <option>Todos os jogos</option>
+        <select
+          value={selectedDateFilter}
+          onChange={(e) => setSelectedDateFilter(e.target.value as DateFilter)}
+          className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-600 outline-none focus:border-purple-500 min-w-[200px]"
+        >
+          <option value="all">Todos os períodos</option>
+          <option value="today">Hoje</option>
+          <option value="7days">Últimos 7 dias</option>
+          <option value="30days">Últimos 30 dias</option>
         </select>
       </div>
 

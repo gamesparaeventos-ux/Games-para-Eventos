@@ -40,6 +40,7 @@ import {
   Key,
   Users,
   Wallet,
+  RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdmin } from "../../contexts/AdminContext";
@@ -65,6 +66,8 @@ interface UserRoleRow {
   role: AppRole;
 }
 
+type CreditsActionType = "add" | "remove" | "reset";
+
 const AdminClients = () => {
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
@@ -76,7 +79,7 @@ const AdminClients = () => {
   const [creditsModal, setCreditsModal] = useState<{
     open: boolean;
     client: Profile | null;
-    type: "add" | "remove";
+    type: CreditsActionType;
   }>({
     open: false,
     client: null,
@@ -203,33 +206,66 @@ const AdminClients = () => {
       userId,
       amount,
       type,
+      currentCredits,
     }: {
       userId: string;
       amount: number;
-      type: "add" | "remove";
+      type: CreditsActionType;
+      currentCredits: number;
     }) => {
       if (!currentUser?.id) {
         throw new Error("Admin não identificado.");
       }
 
-      if (!Number.isFinite(amount) || amount <= 0) {
-        throw new Error("Informe uma quantidade de créditos válida.");
+      if (!Number.isFinite(amount) || amount < 0) {
+        throw new Error("Informe uma quantidade válida de créditos.");
       }
+
+      if (type !== "reset" && amount <= 0) {
+        throw new Error("Informe uma quantidade válida de créditos.");
+      }
+
+      const isReset = type === "reset";
+
+      let rpcAmount = amount;
+      if (type === "remove") {
+        rpcAmount = -amount;
+      }
+
+      const transactionType =
+        isReset
+          ? amount >= currentCredits
+            ? "credit_added"
+            : "credit_used"
+          : type === "add"
+            ? "credit_added"
+            : "credit_used";
+
+      const reason =
+        type === "add"
+          ? "Créditos adicionados via painel"
+          : type === "remove"
+            ? "Créditos removidos via painel"
+            : "Saldo ajustado via painel";
 
       const { error } = await supabase.rpc("admin_manage_credits", {
         p_admin_id: currentUser.id,
         p_target_user_id: userId,
-        p_amount: type === "add" ? amount : -amount,
-        p_type: "manual_admin",
-        p_reason: "Modificado via painel",
-        p_is_reset: false,
+        p_amount: rpcAmount,
+        p_type: transactionType,
+        p_reason: reason,
+        p_is_reset: isReset,
       });
 
       if (error) throw error;
     },
     onSuccess: async (_, variables) => {
       await logAdminAction(
-        variables.type === "add" ? "add_credits" : "remove_credits",
+        variables.type === "add"
+          ? "add_credits"
+          : variables.type === "remove"
+            ? "remove_credits"
+            : "reset_credits",
         "user",
         variables.userId,
         undefined,
@@ -242,7 +278,11 @@ const AdminClients = () => {
       setCreditsModal({ open: false, client: null, type: "add" });
       setCreditsAmount("");
 
-      toast.success("Créditos atualizados com sucesso!");
+      toast.success(
+        variables.type === "reset"
+          ? "Saldo redefinido com sucesso!"
+          : "Créditos atualizados com sucesso!"
+      );
     },
     onError: (error) => {
       console.error("[AdminClients] Erro ao atualizar créditos:", error);
@@ -376,7 +416,7 @@ const AdminClients = () => {
                 </Button>
               </DropdownMenuTrigger>
 
-              <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuContent align="end" className="w-52">
                 <DropdownMenuItem onClick={() => setDetailsClient(client)}>
                   <Eye className="h-4 w-4 mr-2" />
                   Detalhes
@@ -438,6 +478,16 @@ const AdminClients = () => {
                   Remover Créditos
                 </DropdownMenuItem>
 
+                <DropdownMenuItem
+                  onClick={() => {
+                    setCreditsAmount(String(client.credits || 0));
+                    setCreditsModal({ open: true, client, type: "reset" });
+                  }}
+                >
+                  <RotateCcw className="h-4 w-4 mr-2 text-amber-600" />
+                  Definir Saldo Exato
+                </DropdownMenuItem>
+
                 <DropdownMenuSeparator />
 
                 {client.status === "blocked" ? (
@@ -478,10 +528,32 @@ const AdminClients = () => {
 
   const currentCredits = creditsModal.client?.credits || 0;
   const parsedCreditsAmount = parseInt(creditsAmount || "0", 10);
+
   const estimatedCredits =
     creditsModal.type === "add"
       ? currentCredits + (Number.isFinite(parsedCreditsAmount) ? parsedCreditsAmount : 0)
-      : Math.max(0, currentCredits - (Number.isFinite(parsedCreditsAmount) ? parsedCreditsAmount : 0));
+      : creditsModal.type === "remove"
+        ? Math.max(0, currentCredits - (Number.isFinite(parsedCreditsAmount) ? parsedCreditsAmount : 0))
+        : Number.isFinite(parsedCreditsAmount)
+          ? Math.max(0, parsedCreditsAmount)
+          : currentCredits;
+
+  const creditsModalTitle =
+    creditsModal.type === "add"
+      ? "Adicionar Créditos"
+      : creditsModal.type === "remove"
+        ? "Remover Créditos"
+        : "Definir Saldo Exato";
+
+  const creditsModalDescription =
+    creditsModal.type === "add"
+      ? "Os créditos serão somados ao saldo atual do cliente."
+      : creditsModal.type === "remove"
+        ? "Os créditos serão removidos do saldo atual sem permitir valor negativo."
+        : "O saldo do cliente será ajustado para exatamente o valor informado.";
+
+  const creditsInputLabel =
+    creditsModal.type === "reset" ? "Novo Saldo do Cliente" : "Quantidade de Créditos";
 
   return (
     <AdminLayout>
@@ -542,12 +614,17 @@ const AdminClients = () => {
               {creditsModal.type === "add" ? (
                 <>
                   <Plus className="w-5 h-5 text-emerald-600" />
-                  Adicionar Créditos
+                  {creditsModalTitle}
+                </>
+              ) : creditsModal.type === "remove" ? (
+                <>
+                  <Minus className="w-5 h-5 text-rose-600" />
+                  {creditsModalTitle}
                 </>
               ) : (
                 <>
-                  <Minus className="w-5 h-5 text-rose-600" />
-                  Remover Créditos
+                  <RotateCcw className="w-5 h-5 text-amber-600" />
+                  {creditsModalTitle}
                 </>
               )}
             </DialogTitle>
@@ -581,7 +658,11 @@ const AdminClients = () => {
                   <Wallet className="w-4 h-4 text-slate-500" />
                   <span
                     className={`text-2xl font-black ${
-                      creditsModal.type === "add" ? "text-emerald-700" : "text-rose-700"
+                      creditsModal.type === "add"
+                        ? "text-emerald-700"
+                        : creditsModal.type === "remove"
+                          ? "text-rose-700"
+                          : "text-amber-700"
                     }`}
                   >
                     {estimatedCredits}
@@ -591,20 +672,22 @@ const AdminClients = () => {
             </div>
 
             <div className="space-y-2">
-              <Label className="font-bold text-slate-700">Quantidade de Créditos</Label>
+              <Label className="font-bold text-slate-700">{creditsInputLabel}</Label>
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3">
                 <Input
                   type="number"
-                  min="1"
-                  placeholder="Digite a quantidade. Ex: 10"
+                  min="0"
+                  placeholder={
+                    creditsModal.type === "reset"
+                      ? "Digite o saldo final. Ex: 100"
+                      : "Digite a quantidade. Ex: 10"
+                  }
                   value={creditsAmount}
                   onChange={(e) => setCreditsAmount(e.target.value)}
                   className="border-0 bg-transparent shadow-none focus-visible:ring-0 text-xl font-black text-slate-900 px-1"
                 />
                 <p className="text-xs text-slate-500 mt-2 px-1">
-                  {creditsModal.type === "add"
-                    ? "Os créditos serão somados ao saldo atual do cliente."
-                    : "Os créditos serão removidos do saldo atual sem permitir valor negativo."}
+                  {creditsModalDescription}
                 </p>
               </div>
             </div>
@@ -626,7 +709,9 @@ const AdminClients = () => {
               className={
                 creditsModal.type === "add"
                   ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                  : "bg-rose-600 hover:bg-rose-700 text-white"
+                  : creditsModal.type === "remove"
+                    ? "bg-rose-600 hover:bg-rose-700 text-white"
+                    : "bg-amber-600 hover:bg-amber-700 text-white"
               }
               onClick={() => {
                 const parsedAmount = parseInt(creditsAmount, 10);
@@ -636,7 +721,12 @@ const AdminClients = () => {
                   return;
                 }
 
-                if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+                if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
+                  toast.error("Informe um valor válido.");
+                  return;
+                }
+
+                if (creditsModal.type !== "reset" && parsedAmount <= 0) {
                   toast.error("Informe uma quantidade válida de créditos.");
                   return;
                 }
@@ -645,11 +735,16 @@ const AdminClients = () => {
                   userId: creditsModal.client.id,
                   amount: parsedAmount,
                   type: creditsModal.type,
+                  currentCredits,
                 });
               }}
               disabled={!creditsAmount || updateCreditsMutation.isPending}
             >
-              {updateCreditsMutation.isPending ? "Processando..." : "Confirmar Alteração"}
+              {updateCreditsMutation.isPending
+                ? "Processando..."
+                : creditsModal.type === "reset"
+                  ? "Definir Saldo"
+                  : "Confirmar Alteração"}
             </Button>
           </DialogFooter>
         </DialogContent>
