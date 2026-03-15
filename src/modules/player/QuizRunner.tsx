@@ -102,38 +102,88 @@ export function QuizRunner({ config, mode, onComplete }: QuizRunnerProps) {
 
   if (gameStatus === 'finished') {
     return (
-      <div className="w-full h-full min-h-[400px] bg-white rounded-3xl flex flex-col items-center justify-center p-8 text-center animate-fade-in">
-        <div className="w-24 h-24 bg-yellow-400 rounded-full flex items-center justify-center mb-6 shadow-lg animate-bounce">
-          <Trophy size={48} className="text-yellow-900" />
-        </div>
-        <h2 className="text-2xl font-black text-slate-800 mb-2">FIM DE JOGO!</h2>
-        <div className="text-5xl font-black text-purple-600 mb-8">{score}</div>
+      <div
+        className="w-full h-full min-h-[400px] rounded-3xl flex flex-col items-center justify-center p-8 text-center animate-fade-in relative overflow-hidden"
+        style={{
+          backgroundColor: finalConfig?.primaryColor || '#312e81',
+          backgroundImage: finalConfig?.backgroundImageUrl
+            ? `url(${finalConfig.backgroundImageUrl})`
+            : undefined,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+        }}
+      >
+        <div className="absolute inset-0 bg-black/40 pointer-events-none" />
 
-        {(mode === 'preview' || mode === 'office') && (
-          <button
-            onClick={() => {
-              setGameStatus('playing');
-              setCurrentQuestionIndex(0);
-              setScore(0);
-              setTimeLeft(15);
-              setIsAnswered(false);
-              setSelectedOption(null);
-            }}
-            className="px-6 py-2 bg-slate-100 text-slate-600 font-bold rounded-lg hover:bg-slate-200 transition-colors text-sm"
-          >
-            Jogar Novamente
-          </button>
-        )}
+        <div className="relative z-10 flex flex-col items-center">
+          {finalConfig?.logoUrl && (
+            <img
+              src={finalConfig.logoUrl}
+              alt="Logo"
+              className="h-16 object-contain mb-6 drop-shadow-lg"
+            />
+          )}
+
+          <div className="w-24 h-24 bg-yellow-400 rounded-full flex items-center justify-center mb-6 shadow-lg animate-bounce">
+            <Trophy size={48} className="text-yellow-900" />
+          </div>
+
+          <h2 className="text-2xl font-black text-white mb-2">FIM DE JOGO!</h2>
+          <div className="text-5xl font-black text-white mb-8">{score}</div>
+
+          {(mode === 'preview' || mode === 'office') && (
+            <button
+              onClick={() => {
+                setGameStatus('playing');
+                setCurrentQuestionIndex(0);
+                setScore(0);
+                setTimeLeft(15);
+                setIsAnswered(false);
+                setSelectedOption(null);
+              }}
+              className="px-6 py-2 bg-white/90 text-slate-700 font-bold rounded-lg hover:bg-white transition-colors text-sm"
+            >
+              Jogar Novamente
+            </button>
+          )}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full h-full flex flex-col relative overflow-hidden bg-indigo-950 font-sans shadow-2xl">
+    <div
+      className="w-full h-full flex flex-col relative overflow-hidden font-sans shadow-2xl"
+      style={{
+        backgroundColor: finalConfig?.primaryColor || '#312e81',
+        backgroundImage: finalConfig?.backgroundImageUrl
+          ? `url(${finalConfig.backgroundImageUrl})`
+          : undefined,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+      }}
+    >
+      <div className="absolute inset-0 bg-black/45 pointer-events-none" />
+
       <div
         className="absolute inset-0 opacity-10 pointer-events-none"
-        style={{ backgroundImage: 'radial-gradient(circle at 50% 50%, #fff 1%, transparent 1%)', backgroundSize: '30px 30px' }}
+        style={{
+          backgroundImage: 'radial-gradient(circle at 50% 50%, #fff 1%, transparent 1%)',
+          backgroundSize: '30px 30px'
+        }}
       />
+
+      {finalConfig?.logoUrl && (
+        <div className="relative z-10 flex justify-center pt-4 px-4">
+          <img
+            src={finalConfig.logoUrl}
+            alt="Logo"
+            className="h-14 max-w-[180px] object-contain drop-shadow-lg"
+          />
+        </div>
+      )}
 
       <div className="p-4 flex justify-between items-center relative z-10">
         <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-full text-white font-bold flex items-center gap-2 border border-white/20 text-sm">
@@ -141,14 +191,14 @@ export function QuizRunner({ config, mode, onComplete }: QuizRunnerProps) {
         </div>
         <div
           className={`px-4 py-2 rounded-full font-bold flex items-center gap-2 border transition-colors text-sm ${
-            timeLeft <= 5 ? 'bg-red-500/20 border-red-500 text-red-500 animate-pulse' : 'bg-white/10 border-white/20 text-white'
+            timeLeft <= 5 ? 'bg-red-500/20 border-red-500 text-red-200 animate-pulse' : 'bg-white/10 border-white/20 text-white'
           }`}
         >
           <Timer size={16} /> {timeLeft}s
         </div>
       </div>
 
-      <div className="w-full h-1 bg-indigo-900/50 mt-2">
+      <div className="w-full h-1 bg-indigo-900/50 mt-2 relative z-10">
         <div className="h-full bg-yellow-400 transition-all duration-500 ease-out" style={{ width: `${progress}%` }} />
       </div>
 
@@ -160,6 +210,7 @@ export function QuizRunner({ config, mode, onComplete }: QuizRunnerProps) {
         <div className="grid grid-cols-1 gap-2 w-full pb-4">
           {currentQuestion.options.map((optionText, idx) => {
             let btnClass = 'bg-white text-indigo-900 border-indigo-100 hover:bg-indigo-50';
+
             if (isAnswered) {
               if (idx === currentQuestion.correctIndex) btnClass = 'bg-green-500 text-white border-green-600';
               else if (idx === selectedOption) btnClass = 'bg-red-500 text-white border-red-600 opacity-50';

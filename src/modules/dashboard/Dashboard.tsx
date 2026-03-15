@@ -139,103 +139,144 @@ export function DashboardPage() {
   }, [effectiveUserId, impersonate.active, profile, user]);
 
   return (
-    <div className="space-y-8 animate-fade-in font-sans text-slate-600">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-800">Olá, {userName} 👋</h1>
-        <p className="text-slate-500">Bem-vindo de volta ao seu painel.</p>
+    <div className="w-full min-w-0 space-y-6 sm:space-y-8 animate-fade-in font-sans text-slate-600">
+      <div className="min-w-0">
+        <h1 className="text-xl sm:text-2xl font-bold text-slate-800 break-words">
+          Olá, {userName} 👋
+        </h1>
+        <p className="text-sm sm:text-base text-slate-500 break-words">
+          Bem-vindo de volta ao seu painel.
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-start gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6 min-w-0">
+        <div className="min-w-0 bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-sm flex items-start gap-4">
           <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center shrink-0">
             <CreditCard size={24} />
           </div>
-          <div>
-            <p className="text-2xl font-bold text-slate-800">{stats.credits}</p>
+          <div className="min-w-0">
+            <p className="text-2xl font-bold text-slate-800 break-words">{stats.credits}</p>
             <p className="text-xs text-slate-500 font-medium">Créditos</p>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-start gap-4">
+        <div className="min-w-0 bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-sm flex items-start gap-4">
           <div className="w-12 h-12 bg-green-100 text-green-600 rounded-xl flex items-center justify-center shrink-0">
             <Calendar size={24} />
           </div>
-          <div>
-            <p className="text-2xl font-bold text-slate-800">{stats.events}</p>
+          <div className="min-w-0">
+            <p className="text-2xl font-bold text-slate-800 break-words">{stats.events}</p>
             <p className="text-xs text-slate-500 font-medium">Eventos</p>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-start gap-4">
+        <div className="min-w-0 bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-sm flex items-start gap-4">
           <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center shrink-0">
             <Gamepad2 size={24} />
           </div>
-          <div>
-            <p className="text-2xl font-bold text-slate-800">{stats.games}</p>
+          <div className="min-w-0">
+            <p className="text-2xl font-bold text-slate-800 break-words">{stats.games}</p>
             <p className="text-xs text-slate-500 font-medium">Jogos</p>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-start gap-4">
+        <div className="min-w-0 bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-sm flex items-start gap-4">
           <div className="w-12 h-12 bg-orange-100 text-orange-600 rounded-xl flex items-center justify-center shrink-0">
             <Download size={24} />
           </div>
-          <div>
-            <p className="text-2xl font-bold text-slate-800">{stats.leads}</p>
+          <div className="min-w-0">
+            <p className="text-2xl font-bold text-slate-800 break-words">{stats.leads}</p>
             <p className="text-xs text-slate-500 font-medium">Leads</p>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Link to="/events/new" className="bg-purple-600 rounded-2xl p-6 text-white shadow-lg hover:scale-[1.02] transition-transform flex flex-col justify-between h-32">
-          <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 min-w-0">
+        <Link
+          to="/events/new"
+          className="min-w-0 bg-purple-600 rounded-2xl p-5 sm:p-6 text-white shadow-lg hover:scale-[1.02] transition-transform flex flex-col justify-between min-h-[120px] sm:h-32"
+        >
+          <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center shrink-0">
             <Plus size={24} />
           </div>
-          <h3 className="font-bold">Criar Novo Evento</h3>
+          <h3 className="font-bold break-words">Criar Novo Evento</h3>
         </Link>
 
-        <Link to="/games" className="bg-blue-600 rounded-2xl p-6 text-white shadow-lg hover:scale-[1.02] transition-transform flex flex-col justify-between h-32">
-          <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+        <Link
+          to="/games"
+          className="min-w-0 bg-blue-600 rounded-2xl p-5 sm:p-6 text-white shadow-lg hover:scale-[1.02] transition-transform flex flex-col justify-between min-h-[120px] sm:h-32"
+        >
+          <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center shrink-0">
             <Gamepad2 size={24} />
           </div>
-          <h3 className="font-bold">Meus Jogos</h3>
+          <h3 className="font-bold break-words">Meus Jogos</h3>
         </Link>
 
-        <Link to="/leads" className="bg-green-500 rounded-2xl p-6 text-white shadow-lg hover:scale-[1.02] transition-transform flex flex-col justify-between h-32">
-          <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+        <Link
+          to="/leads"
+          className="min-w-0 bg-green-500 rounded-2xl p-5 sm:p-6 text-white shadow-lg hover:scale-[1.02] transition-transform flex flex-col justify-between min-h-[120px] sm:h-32"
+        >
+          <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center shrink-0">
             <Users size={24} />
           </div>
-          <h3 className="font-bold">Ver Leads</h3>
+          <h3 className="font-bold break-words">Ver Leads</h3>
         </Link>
       </div>
 
-      <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm">
-        <h3 className="font-bold text-slate-800 mb-6">Primeiros Passos</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className={`p-4 rounded-xl border flex gap-4 ${stats.events > 0 ? 'bg-green-50 border-green-100' : 'bg-slate-50 border-slate-100'}`}>
-            <div className="mt-1">
-              {stats.events > 0 ? <CheckCircle className="text-green-500" size={20} /> : <Circle className="text-slate-300" size={20} />}
+      <div className="min-w-0 bg-white p-5 sm:p-6 lg:p-8 rounded-2xl border border-slate-100 shadow-sm">
+        <h3 className="font-bold text-slate-800 mb-4 sm:mb-6">Primeiros Passos</h3>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 min-w-0">
+          <div
+            className={`min-w-0 p-4 rounded-xl border flex gap-4 ${
+              stats.events > 0 ? 'bg-green-50 border-green-100' : 'bg-slate-50 border-slate-100'
+            }`}
+          >
+            <div className="mt-1 shrink-0">
+              {stats.events > 0 ? (
+                <CheckCircle className="text-green-500" size={20} />
+              ) : (
+                <Circle className="text-slate-300" size={20} />
+              )}
             </div>
-            <div>
-              <h4 className="text-sm font-bold text-slate-700">Crie seu primeiro evento</h4>
-              <p className="text-xs text-slate-500 mt-1">Configure os dados básicos.</p>
+
+            <div className="min-w-0">
+              <h4 className="text-sm font-bold text-slate-700 break-words">
+                Crie seu primeiro evento
+              </h4>
+              <p className="text-xs text-slate-500 mt-1 break-words">
+                Configure os dados básicos.
+              </p>
             </div>
           </div>
 
-          <div className="p-4 rounded-xl border bg-slate-50 border-slate-100 flex gap-4">
-            <div className="mt-1"><Circle className="text-slate-300" size={20} /></div>
-            <div>
-              <h4 className="text-sm font-bold text-slate-700">Personalize um jogo</h4>
-              <p className="text-xs text-slate-500 mt-1">Adicione sua marca e cores.</p>
+          <div className="min-w-0 p-4 rounded-xl border bg-slate-50 border-slate-100 flex gap-4">
+            <div className="mt-1 shrink-0">
+              <Circle className="text-slate-300" size={20} />
+            </div>
+
+            <div className="min-w-0">
+              <h4 className="text-sm font-bold text-slate-700 break-words">
+                Personalize um jogo
+              </h4>
+              <p className="text-xs text-slate-500 mt-1 break-words">
+                Adicione sua marca e cores.
+              </p>
             </div>
           </div>
 
-          <div className="p-4 rounded-xl border bg-slate-50 border-slate-100 flex gap-4">
-            <div className="mt-1"><Circle className="text-slate-300" size={20} /></div>
-            <div>
-              <h4 className="text-sm font-bold text-slate-700">Capture leads</h4>
-              <p className="text-xs text-slate-500 mt-1">Colete dados reais.</p>
+          <div className="min-w-0 p-4 rounded-xl border bg-slate-50 border-slate-100 flex gap-4">
+            <div className="mt-1 shrink-0">
+              <Circle className="text-slate-300" size={20} />
+            </div>
+
+            <div className="min-w-0">
+              <h4 className="text-sm font-bold text-slate-700 break-words">
+                Capture leads
+              </h4>
+              <p className="text-xs text-slate-500 mt-1 break-words">
+                Colete dados reais.
+              </p>
             </div>
           </div>
         </div>

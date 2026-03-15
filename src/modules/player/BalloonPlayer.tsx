@@ -20,6 +20,7 @@ interface GameConfig {
   speed: number;
   balloonCount: number;
   balloonLogoUrl?: string;
+  backgroundImageUrl?: string;
   skipLeadGate: boolean;
 }
 
@@ -67,6 +68,7 @@ export function BalloonPlayer() {
         speed: cfg.speed || 2,
         balloonCount: cfg.balloonCount || 5,
         balloonLogoUrl: cfg.balloonLogoUrl,
+        backgroundImageUrl: cfg.backgroundImageUrl,
         skipLeadGate: cfg.skipLeadGate || false
       };
 
@@ -157,7 +159,17 @@ export function BalloonPlayer() {
   if (gameState === 'gate') return <LeadGate eventId={id!} config={config} blockReason={blockReason} onPass={() => setGameState('playing')} />;
 
   return (
-    <div className="h-screen w-screen overflow-hidden font-sans relative touch-none select-none bg-gradient-to-b from-[#6366f1] to-[#a855f7]">
+    <div
+      className="h-screen w-screen overflow-hidden font-sans relative touch-none select-none bg-gradient-to-b from-[#6366f1] to-[#a855f7]"
+      style={{
+        backgroundImage: config?.backgroundImageUrl
+          ? `url(${config.backgroundImageUrl})`
+          : undefined,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat'
+      }}
+    >
       
       <div className="absolute top-0 left-0 w-full p-4 flex justify-between items-start z-50 pointer-events-none">
         <button onClick={() => window.history.back()} className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center text-white backdrop-blur-sm shadow-sm pointer-events-auto active:scale-95 transition-transform">
